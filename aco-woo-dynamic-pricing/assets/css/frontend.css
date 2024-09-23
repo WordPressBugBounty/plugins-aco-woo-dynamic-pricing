@@ -1,0 +1,49 @@
+.wdpDynamicValue p{
+    margin-bottom: 10px;
+}
+.wdpDynamicValue{
+    margin: 0px 0 20px 0;
+    width: 100%;
+    display: none;
+}
+.wdpHiddenPrice{
+    display: none;
+}
+
+/**Loader**/
+.wdpLoader{
+    display: inline-block;
+}
+.wdpLoader span {
+    animation: dot-keyframes 1.5s infinite ease-in-out;
+    background-color: #000;
+    border-radius: 10px;
+    display: inline-block;
+    height: 3px;
+    width: 3px;
+    margin: 2px  2px 0 2px;
+}
+.wdpLoader span:nth-child(2) {
+    animation-delay: .5s;
+}
+.wdpLoader span:nth-child(3) {
+    animation-delay: 1s;
+}
+.wdp_save_text{
+    margin-bottom: 25px;
+}
+
+@keyframes dot-keyframes {
+    0% {
+        opacity: .4;
+        transform: scale(1, 1);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.2, 1.2);
+    }
+    100% {
+        opacity: .4;
+        transform: scale(1, 1);
+    }
+}

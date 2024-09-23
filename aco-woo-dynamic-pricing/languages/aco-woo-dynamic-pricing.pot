@@ -1,0 +1,274 @@
+# Copyright (C) 2023 Acowebs
+# This file is distributed under the same license as the Acowebs Woocommerce Dynamic Pricing plugin.
+msgid ""
+msgstr ""
+"Project-Id-Version: Acowebs Woocommerce Dynamic Pricing 4.4.5\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/aco-woo-dynamic-pricing-free\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2023-03-28T08:20:12+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.3.0\n"
+"X-Domain: aco-woo-dynamic-pricing\n"
+
+#. Plugin Name of the plugin
+msgid "Acowebs Woocommerce Dynamic Pricing"
+msgstr ""
+
+#. Description of the plugin
+msgid "Woocommerce Dynamic Pricing helps to apply discounts for woocommerce products. Its sophisticated user interfaces will help to add discounts very easily."
+msgstr ""
+
+#. Author of the plugin
+msgid "Acowebs"
+msgstr ""
+
+#. Author URI of the plugin
+msgid "http://acowebs.com"
+msgstr ""
+
+#: includes/class-awdp-api.php:212
+#: includes/class-awdp-api.php:356
+#: includes/class-awdp-api.php:460
+#: includes/class-awdp-api.php:550
+#: includes/class-awdp-api.php:667
+#: includes/class-awdp-api.php:1436
+#: includes/class-awdp-discount.php:53
+msgid "Percentage of cart total amount"
+msgstr ""
+
+#: includes/class-awdp-api.php:213
+#: includes/class-awdp-api.php:357
+#: includes/class-awdp-api.php:461
+#: includes/class-awdp-api.php:551
+#: includes/class-awdp-api.php:668
+#: includes/class-awdp-api.php:1437
+#: includes/class-awdp-discount.php:54
+msgid "Percentage of product price"
+msgstr ""
+
+#: includes/class-awdp-api.php:214
+#: includes/class-awdp-api.php:358
+#: includes/class-awdp-api.php:462
+#: includes/class-awdp-api.php:552
+#: includes/class-awdp-api.php:669
+#: includes/class-awdp-api.php:1438
+#: includes/class-awdp-discount.php:55
+msgid "Fixed price of product price"
+msgstr ""
+
+#: includes/class-awdp-api.php:215
+#: includes/class-awdp-api.php:359
+#: includes/class-awdp-api.php:463
+#: includes/class-awdp-api.php:553
+#: includes/class-awdp-api.php:670
+#: includes/class-awdp-api.php:1439
+#: includes/class-awdp-discount.php:56
+msgid "Fixed price of cart total amount"
+msgstr ""
+
+#: includes/class-awdp-api.php:216
+#: includes/class-awdp-api.php:360
+#: includes/class-awdp-api.php:464
+#: includes/class-awdp-api.php:554
+#: includes/class-awdp-api.php:671
+#: includes/class-awdp-api.php:1440
+#: includes/class-awdp-discount.php:57
+msgid "Quantity based discount"
+msgstr ""
+
+#: includes/class-awdp-api.php:217
+#: includes/class-awdp-api.php:361
+#: includes/class-awdp-api.php:465
+#: includes/class-awdp-api.php:555
+#: includes/class-awdp-api.php:672
+#: includes/class-awdp-api.php:1441
+msgid "Buy X Get X"
+msgstr ""
+
+#: includes/class-awdp-api.php:218
+#: includes/class-awdp-api.php:362
+#: includes/class-awdp-api.php:466
+#: includes/class-awdp-api.php:556
+#: includes/class-awdp-api.php:673
+#: includes/class-awdp-api.php:1442
+msgid "Gift Product"
+msgstr ""
+
+#: includes/class-awdp-api.php:219
+#: includes/class-awdp-api.php:363
+#: includes/class-awdp-api.php:467
+#: includes/class-awdp-api.php:557
+#: includes/class-awdp-api.php:674
+#: includes/class-awdp-api.php:1443
+msgid "Payment method"
+msgstr ""
+
+#: includes/class-awdp-api.php:220
+#: includes/class-awdp-api.php:364
+#: includes/class-awdp-api.php:468
+#: includes/class-awdp-api.php:558
+#: includes/class-awdp-api.php:675
+#: includes/class-awdp-api.php:1444
+msgid "Shipping method"
+msgstr ""
+
+#: includes/class-awdp-backend.php:152
+#: includes/class-awdp-backend.php:168
+#: includes/class-awdp-front-end.php:466
+msgid "Pricing Rules"
+msgstr ""
+
+#: includes/class-awdp-backend.php:154
+#: includes/class-awdp-backend.php:169
+#: includes/class-awdp-front-end.php:508
+#: includes/class-awdp-front-end.php:515
+msgid "Product Lists"
+msgstr ""
+
+#: includes/class-awdp-backend.php:156
+msgid "Settings"
+msgstr ""
+
+#: includes/class-awdp-backend.php:170
+msgid "Upgrade to PRO"
+msgstr ""
+
+#: includes/class-awdp-backend.php:261
+msgid "Discount"
+msgstr ""
+
+#: includes/class-awdp-discount.php:912
+msgid "You'he saved "
+msgstr ""
+
+#: includes/class-awdp-discount.php:912
+msgid " on this order"
+msgstr ""
+
+#: includes/class-awdp-discount.php:1948
+msgid " has been applied!"
+msgstr ""
+
+#: includes/class-awdp-discount.php:1948
+msgid "Discount '"
+msgstr ""
+
+#: includes/class-awdp-discount.php:1948
+msgid "' has been applied!"
+msgstr ""
+
+#: includes/class-awdp-discount.php:2047
+#: includes/class-awdp-viewpricingtable.php:100
+msgid "% OFF"
+msgstr ""
+
+#: includes/class-awdp-discount.php:2048
+#: includes/class-awdp-viewpricingtable.php:101
+msgid " OFF on cart value"
+msgstr ""
+
+#: includes/class-awdp-discount.php:2049
+#: includes/class-awdp-viewpricingtable.php:102
+msgid " OFF"
+msgstr ""
+
+#: includes/class-awdp-discount.php:2050
+#: includes/class-awdp-viewpricingtable.php:103
+msgid " will be deducted from cart"
+msgstr ""
+
+#: includes/class-awdp-discount.php:2413
+msgid "Free"
+msgstr ""
+
+#: includes/class-awdp-discount.php:2413
+msgid "Shipping"
+msgstr ""
+
+#: includes/class-awdp-discount.php:2419
+msgid "Total"
+msgstr ""
+
+#: includes/class-awdp-front-end.php:467
+msgid "Pricing Rule"
+msgstr ""
+
+#: includes/class-awdp-front-end.php:469
+msgid "Add New Product Form"
+msgstr ""
+
+#: includes/class-awdp-front-end.php:470
+#: includes/class-awdp-front-end.php:512
+msgid "Add New %s"
+msgstr ""
+
+#: includes/class-awdp-front-end.php:471
+#: includes/class-awdp-front-end.php:513
+msgid "Edit %s"
+msgstr ""
+
+#: includes/class-awdp-front-end.php:472
+#: includes/class-awdp-front-end.php:514
+msgid "New %s"
+msgstr ""
+
+#: includes/class-awdp-front-end.php:473
+msgid "Product Rules"
+msgstr ""
+
+#: includes/class-awdp-front-end.php:474
+#: includes/class-awdp-front-end.php:516
+msgid "View %s"
+msgstr ""
+
+#: includes/class-awdp-front-end.php:475
+#: includes/class-awdp-front-end.php:517
+msgid "Search %s"
+msgstr ""
+
+#: includes/class-awdp-front-end.php:476
+#: includes/class-awdp-front-end.php:518
+msgid "No %s Found"
+msgstr ""
+
+#: includes/class-awdp-front-end.php:477
+#: includes/class-awdp-front-end.php:519
+msgid "No %s Found In Trash"
+msgstr ""
+
+#: includes/class-awdp-front-end.php:509
+msgid "Product List"
+msgstr ""
+
+#: includes/class-awdp-front-end.php:511
+msgid "Add New Product List"
+msgstr ""
+
+#: includes/class-awdp-viewpricingtable.php:81
+#: includes/class-awdp-viewpricingtable.php:89
+msgid "Quantity Discounts"
+msgstr ""
+
+#: includes/class-awdp-viewpricingtable.php:82
+#: includes/class-awdp-viewpricingtable.php:84
+#: includes/class-awdp-viewpricingtable.php:90
+#: includes/class-awdp-viewpricingtable.php:92
+msgid "Price"
+msgstr ""
+
+#: includes/class-awdp-viewpricingtable.php:83
+#: includes/class-awdp-viewpricingtable.php:91
+msgid "Quantity"
+msgstr ""
+
+#: includes/class-awdp-viewpricingtable.php:961
+msgid "Your Price"
+msgstr ""
+
+#: includes/class-awdp-viewpricingtable.php:962
+msgid "Total Price"
+msgstr ""
