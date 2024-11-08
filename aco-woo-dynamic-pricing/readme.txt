@@ -5,8 +5,8 @@ Contributors: acowebs
 Donate link:
 Tags: WooCommerce Dynamic Pricing, WooCommerce Discount rules, WooCommerce Bulk Discounts, WooCommerce Pricing Deals
 Requires at least: 4.4
-Tested up to: 6.5
-Stable tag: 4.5.4
+Tested up to: 6.6
+Stable tag: 4.5.5
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -222,6 +222,9 @@ Yes, you can change the border color to match your theme style. We have also pro
 You will be able to use plugin in your site, but however, you won't be able to receive any further updates and priority support.
 
 == Changelog ==
+= 4.5.5 =
+* Support for WordPress 6.6 and WooCommerce 9.3
+* [Bug fix]: PHP Warning
 = 4.5.4 =
 * Support for WooCommerce 8.9
 * [Bug fix]: PHP Warning

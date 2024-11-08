@@ -744,8 +744,8 @@ class AWDP_viewPricingTable {
                             $discount_min_value = $price_to_discount_min * ((float)$discount_val / 100);
                             // $discount_max_value = min($price_to_discount, $discount_pt);
                         } else if ($discount_typ == 'fixed') {
-                            $discount_max_value = wc_add_number_precision($discount_val);
-                            $discount_min_value = wc_add_number_precision($discount_val);
+                            $discount_max_value = wc_add_number_precision((float)$discount_val);
+                            $discount_min_value = wc_add_number_precision((float)$discount_val);
                         }
 
                         $discounted_new_max_price = (($price_to_discount_max - $discount_max_value) > 0) ? wc_price ( wc_remove_number_precision ( $price_to_discount_max - $discount_max_value ) ) : 0;

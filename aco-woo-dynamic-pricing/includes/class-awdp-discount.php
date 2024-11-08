@@ -2158,8 +2158,9 @@ class AWDP_Discount
                 // Changing to percent
                 // $total          = $discountItemsActPrice ? ( $total / $discountItemsActPrice ) * 100 : $total; 
                 // $coupnDiscType  = $discountItemsActPrice ? 'percent' : 'fixed_cart'; 
-                $coupnDiscType  = 'fixed_cart'; 
-
+                
+                $coupnDiscType  = 'fixed_cart';
+                
                 $coupon_array = array(
                     'code'                          => mb_strtolower($label, 'UTF-8'),
                     'id'                            => 99999999 + rand(1000, 9999),
@@ -2444,7 +2445,7 @@ class AWDP_Discount
                 // } else {
 
                     // Default value when quantity not in range
-                    $result['price']    = $ProdPrice ? (int)$ProdPrice : 0;
+                    $result['price']    = $ProdPrice ? (float)$ProdPrice : 0;
                     $result['total']    = $ProdPrice ? round ( ( $ProdPrice * $ProdQty ), wc_get_price_decimals() ) : 0;
                     $result['currency'] = get_woocommerce_currency_symbol();
 
@@ -2507,20 +2508,33 @@ class AWDP_Discount
 
     }
 
+    // // Save Order Meta
+    // public function wdpOrderMeta ( $item_id, $values, $cart_item_key ) {
+
+    //     $wdpDiscount    = $this->wdp_order_meta ? $this->wdp_order_meta : [];
+    //     // $coupon         = get_option('awdp_fee_label') ? get_option('awdp_fee_label') : 'Discount';
+    //     // $coupon_code    = apply_filters('woocommerce_coupon_code', $coupon);
+
+    //     if ( array_key_exists ( $cart_item_key, $wdpDiscount ) ) {
+    //         $_awdp_discounted_price = ( $wdpDiscount[$cart_item_key] ) ? $wdpDiscount[$cart_item_key] : [];
+    //         wc_add_order_item_meta($item_id, '_awdp_discount_details', $_awdp_discounted_price);
+    //         // wc_add_order_item_meta($item_id, '_awdp_coupon', $coupon_code);
+    //         return;
+    //     }
+
+    // }
+
     // Save Order Meta
-    public function wdpOrderMeta ( $item_id, $values, $cart_item_key ) {
-
-        $wdpDiscount    = $this->wdp_order_meta ? $this->wdp_order_meta : [];
-        // $coupon         = get_option('awdp_fee_label') ? get_option('awdp_fee_label') : 'Discount';
-        // $coupon_code    = apply_filters('woocommerce_coupon_code', $coupon);
-
-        if ( array_key_exists ( $cart_item_key, $wdpDiscount ) ) {
-            $_awdp_discounted_price = ( $wdpDiscount[$cart_item_key] ) ? $wdpDiscount[$cart_item_key] : [];
-            wc_add_order_item_meta($item_id, '_awdp_discount_details', $_awdp_discounted_price);
-            // wc_add_order_item_meta($item_id, '_awdp_coupon', $coupon_code);
-            return;
+    public function wdpOrderMeta($item_id, $values, $cart_item_key) {
+        $wdpDiscount = $this->wdp_order_meta ? $this->wdp_order_meta : [];
+        if (is_object($values) && isset($values->legacy_values)) {
+            $cart_values = $values->legacy_values;
+            if (isset($cart_values['key']) && array_key_exists($cart_values['key'], $wdpDiscount)) {
+                $_awdp_discounted_price = $wdpDiscount[$cart_values['key']] ? $wdpDiscount[$cart_values['key']] : [];
+                wc_add_order_item_meta($item_id, '_awdp_discount_details', $_awdp_discounted_price);
+                return;
+            }
         }
-
     }
 
     // Display Order Meta

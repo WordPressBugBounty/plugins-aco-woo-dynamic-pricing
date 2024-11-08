@@ -113,8 +113,8 @@ jQuery(document).ready(function ($) {
 
         if ( $dynamicPricing ) {
             let loader = '<div class="wdpLoader"><span></span><span></span><span></span></div>';
-            $('form.cart').find('[name=quantity]').on('change input', function(){
-            // $('form.cart').find('[name=quantity]').on('input', function(){ 
+            // $('form.cart').find('[name=quantity]').on('change input', function(){
+            $('form.cart').find('[name=quantity]').on('input', function(){ 
                 if ( $wdpTable.attr('data-product') === '' ) { return; } 
                 let data = { 
                     'action': 'wdpAjax', 

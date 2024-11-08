@@ -184,8 +184,12 @@ class AWDP_Front_End
             add_action( 'woocommerce_admin_order_item_values', array( $this, 'wdpAdminOrderContent'), 10, 3 );
             // add_action( 'admin_footer', array( $this, 'wdpCustomJS') );
 
-            // Order Meta @@ Ver 5.0.4
-            add_action( 'woocommerce_add_order_item_meta', array( $this, 'wdpOrderMeta'), 10, 3 );
+            /*
+             *  Order Meta @@ Ver 5.0.4
+             *  The 'woocommerce_add_order_item_meta' hook has been changed to 'woocommerce_new_order_item' @@ ver 3.0.0
+             */
+            // add_action( 'woocommerce_add_order_item_meta', array( $this, 'wdpOrderMeta'), 10, 3 );
+            add_action( 'woocommerce_new_order_item', array( $this, 'wdpOrderMeta'), 10, 3 );
             add_action( 'woocommerce_after_order_itemmeta', array( $this, 'wdpDisplayOrderMeta'), 10, 3 );
 
             // Enqueue Scripts
@@ -383,6 +387,10 @@ class AWDP_Front_End
 
     }
     public function coupon_message($msg, $msg_code, $coupon=null) {
+
+        if ($coupon === null) {
+            return $msg;
+        }
 
         $awdappliedCode = $coupon->get_code();
         $awdpluginLabel = get_option('awdp_fee_label') ? get_option('awdp_fee_label') : 'Discount';

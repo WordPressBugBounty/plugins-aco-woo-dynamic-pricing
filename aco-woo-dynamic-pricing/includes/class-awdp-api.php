@@ -1631,13 +1631,13 @@ class AWDP_Api
 
         update_post_meta($id, 'list_type', $data['list_type']);
         $other_config = array(
-            'selectedProducts'  => ($data['selectedProducts']),
-            'productAuthor'     => ($data['productAuthor']),
-            'excludedProducts'  => ($data['excludedProducts']),
-            'taxRelation'       => ($data['taxRelation']),
-            'rules'             => ($data['rules']),
-            'selectionMethod'   => ($data['selectionMethod']),
-            'sku_search'        => ($data['sku_search'])
+            'selectedProducts'  => isset($data['selectedProducts']) ? $data['selectedProducts'] : '',
+            'productAuthor'     => isset($data['productAuthor']) ? $data['productAuthor'] : '',
+            'excludedProducts'  => isset($data['excludedProducts']) ? $data['excludedProducts'] : '',
+            'taxRelation'       => isset($data['taxRelation']) ? $data['taxRelation'] : '',
+            'rules'             => isset($data['rules']) ? $data['rules'] : '',
+            'selectionMethod'   => isset($data['selectionMethod']) ? $data['selectionMethod'] : '',
+            'sku_search'        => isset($data['sku_search']) ? $data['sku_search'] : '',
         );
         update_post_meta($id, 'product_list_config', $other_config);
 
