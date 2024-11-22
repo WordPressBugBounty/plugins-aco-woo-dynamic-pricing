@@ -5,8 +5,8 @@ Contributors: acowebs
 Donate link:
 Tags: WooCommerce Dynamic Pricing, WooCommerce Discount rules, WooCommerce Bulk Discounts, WooCommerce Pricing Deals
 Requires at least: 4.4
-Tested up to: 6.6
-Stable tag: 4.5.5
+Tested up to: 6.7
+Stable tag: 4.5.6
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -16,7 +16,7 @@ The Dynamic Pricing With Discount Rules plugin enables bulk discounts for WooCom
 
 Dynamic Pricing With Discount Rules for WooCommerce plugin helps to apply bulk discounts to WooCommerce products quickly. Just install and go ahead and add your pricing deals based on any specified parameters, in a matter of minutes - its path-breaking UX design makes applying discounts or setting discount rules really effortless and fun.
 
-[Try the Demo](http://wdp-free.demo.acowebs.com/wp-admin/admin.php?page=awdp_admin_ui#/) | [Documentation](https://acowebs.com/guideline/plugin-docs-faqs/wdpd/) | [Pro Version](https://acowebs.com/woocommerce-dynamic-pricing-with-discount-rules/)
+[Try the Demo](https://wdp-free-demo.acowebs.com/wp-admin/admin.php?page=awdp_admin_ui#/) | [Documentation](https://acowebs.com/guideline/plugin-docs-faqs/wdpd/) | [Pro Version](https://acowebs.com/woocommerce-dynamic-pricing-with-discount-rules/)
 
 <strong>Note: Our plugin uses virtual coupons for applying discounts, please make sure that you have coupon settings enabled on your website.</strong>
 
@@ -96,8 +96,8 @@ In the discount rules form, you can fill following fields:
 
 == DEMO - CHECK THIS OUT IN REAL ==
 
-🔗 [Front end Demo](http://wdp-free.demo.acowebs.com/)
-🔗 [Backend Demo](http://wdp-free.demo.acowebs.com/wp-admin/admin.php?page=awdp_admin_ui#/)
+🔗 [Front end Demo](https://wdp-free-demo.acowebs.com/)
+🔗 [Backend Demo](https://wdp-free-demo.acowebs.com/wp-admin/admin.php?page=awdp_admin_ui#/)
 
 == PRO FEATURES ==
 
@@ -132,8 +132,8 @@ In the discount rules form, you can fill following fields:
 
 == PRO DEMO - CHECK THIS OUT IN REAL ==
 
-🔗 [Front end Demo](http://wdp.demo.acowebs.com/)
-🔗 [Backend Demo](http://wdp.demo.acowebs.com/wp-admin/admin.php?page=awdp_admin_ui#/)
+🔗 [Front end Demo](https://wdp-free-demo.acowebs.com/)
+🔗 [Backend Demo](https://wdp-free-demo.acowebs.com/wp-admin/admin.php?page=awdp_admin_ui#/)
 
 == DOCUMENTATIONS ==
 🔗 [Basic Setup Instructions](https://acowebs.com/guideline/plugin-docs-faqs/wdpd/basic-setup-instructions/)
@@ -222,6 +222,8 @@ Yes, you can change the border color to match your theme style. We have also pro
 You will be able to use plugin in your site, but however, you won't be able to receive any further updates and priority support.
 
 == Changelog ==
+= 4.5.6 =
+* Support for WordPress 6.7 and WooCommerce 9.4
 = 4.5.5 =
 * Support for WordPress 6.6 and WooCommerce 9.3
 * [Bug fix]: PHP Warning
