@@ -2718,17 +2718,27 @@ class AWDP_Discount
 
             }
 
-            $shipping       = $woocommerce->cart->get_cart_shipping_total();
-            $taxes          = $woocommerce->cart->get_tax_totals();
+            $shipping           = $woocommerce->cart->get_cart_shipping_total();
+            $taxes              = $woocommerce->cart->get_tax_totals();
             // $cart_total     = $woocommerce->cart->cart_contents_total;
+            $tax_total_display  = get_option('woocommerce_tax_total_display'); 
             $total          = $woocommerce->cart->get_totals();
             if ( $coupons_amount ) { 
                 $result = '<p class="wdp_miniCart total">';
                 $result .= '<span class="wdpLabel">'.$coupon.': </span><span class="woocommerce-Price-amount amount">'.wc_price($coupons_amount).'</span></br>';
                 $result .= ( $shipping && ( strpos ( $shipping, __('Free', 'aco-woo-dynamic-pricing') ) === false) ) ? '<span class="wdpLabel">'.__("Shipping", "aco-woo-dynamic-pricing").': </span><span class="woocommerce-Price-amount amount">'.$shipping.'</span></br>' : '';
                 if ($taxes) {
-                    foreach ($taxes as $key => $val) { 
-                        $result .= '<span class="wdpLabel">'.$val->label.': </span><span class="woocommerce-Price-amount amount">'.wc_price($val->amount).'</span></br>';
+                    if($tax_total_display == 'single') {
+                        $single_tax = 0;
+                        foreach ($taxes as $key => $val) { 
+                            $single_tax += $val->amount; 
+                        }
+                        $tax_label = isset($taxes[array_key_first($taxes)]->label) ? $taxes[array_key_first($taxes)]->label : 'Tax';
+                        $result .= '<span class="wdpLabel">'.$tax_label.': </span><span class="woocommerce-Price-amount amount">'.wc_price($single_tax).'</span></br>';
+                    } else {
+                        foreach ($taxes as $key => $val) { 
+                            $result .= '<span class="wdpLabel">'.$val->label.': </span><span class="woocommerce-Price-amount amount">'.wc_price($val->amount).'</span></br>';
+                        }
                     }
                 }
                 $result .= ( $total && array_key_exists ( 'total', $total ) ) ? '<span class="wdpLabel">'.__("Total", "aco-woo-dynamic-pricing").': </span><span class="woocommerce-Price-amount amount">'.wc_price($total['total']).'</span>' : '';

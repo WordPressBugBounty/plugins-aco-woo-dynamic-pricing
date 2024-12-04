@@ -6,7 +6,7 @@ Donate link:
 Tags: WooCommerce Dynamic Pricing, WooCommerce Discount rules, WooCommerce Bulk Discounts, WooCommerce Pricing Deals
 Requires at least: 4.4
 Tested up to: 6.7
-Stable tag: 4.5.6
+Stable tag: 4.5.7
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -132,8 +132,8 @@ In the discount rules form, you can fill following fields:
 
 == PRO DEMO - CHECK THIS OUT IN REAL ==
 
-🔗 [Front end Demo](https://wdp-free-demo.acowebs.com/)
-🔗 [Backend Demo](https://wdp-free-demo.acowebs.com/wp-admin/admin.php?page=awdp_admin_ui#/)
+🔗 [Front end Demo](https://wdp-demo.acowebs.com/)
+🔗 [Backend Demo](https://wdp-demo.acowebs.com/wp-admin/admin.php?page=awdp_admin_ui#/)
 
 == DOCUMENTATIONS ==
 🔗 [Basic Setup Instructions](https://acowebs.com/guideline/plugin-docs-faqs/wdpd/basic-setup-instructions/)
@@ -222,6 +222,8 @@ Yes, you can change the border color to match your theme style. We have also pro
 You will be able to use plugin in your site, but however, you won't be able to receive any further updates and priority support.
 
 == Changelog ==
+= 4.5.7 =
+* Add option to display tax totals in minicart
 = 4.5.6 =
 * Support for WordPress 6.7 and WooCommerce 9.4
 = 4.5.5 =
