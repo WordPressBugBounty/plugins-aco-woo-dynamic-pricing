@@ -66,6 +66,19 @@ jQuery(document).ready(function ($) {
                     document.dispatchEvent(new Event("wcpaTrigger", {bubbles: true}));
                 }
             });
+
+            // $.ajax({
+            //     dataType : "json",
+            //     url : awdajaxobject.url,
+            //     data : {action: 'wcpaQunantity_Discount',
+            //     proCount: qnty },
+            //     success: function(response) {
+            //         function modifyDiscountRule() {
+            //             return response; 
+            //         }
+            //         wp.hooks.addFilter('wcpa_discount_rule', 'wcpa', modifyDiscountRule, 10);
+            //     }
+            // });
         });
     }
 

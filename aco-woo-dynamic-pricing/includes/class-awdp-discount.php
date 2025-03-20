@@ -451,6 +451,37 @@ class AWDP_Discount
 
     }
 
+    // Adding WCPA Filed Value For Quantity Discount
+    public function wcpaQunantity_Discount() {
+
+        $itemCount          = isset( $_GET['proCount'] ) ? $_GET['proCount'] : 1;
+        $this->load_rules();
+        $rules              = $this->discount_rules;
+        $resut = [];
+        foreach ( $rules as $rule ) {
+            if ( $rule['type'] == 'cart_quantity') {
+                foreach ($rule['quantity_rules'] as $quantity_rule) {
+                   if($itemCount >= $quantity_rule['start_range'] && $itemCount <= $quantity_rule['end_range']) {
+                        if($quantity_rule['dis_type'] == 'percentage') {
+                            $value     = $quantity_rule['dis_value'] ? $quantity_rule['dis_value'] / 100 : 0;
+                            $result['fixed']      = 0;
+                            $result['percentage'] = round($value, 2);
+                        }  elseif ( $quantity_rule['dis_type'] == 'fixed' ) {
+                            $value    = $quantity_rule['dis_value'] ? $quantity_rule['dis_value'] : 0;
+                            $result['percentage'] = 0;
+                            $result['fixed']      = round($value, 2);
+                        }
+                   }
+                    
+                }
+            }
+        }
+        if ( is_array ( $result ) ) {
+            return json_encode($result);
+        }
+        return  $result;
+    }
+
     // WCPA Discount Price For Frontend
     public function wdpDynamicDiscount ()
     {
@@ -1781,7 +1812,13 @@ class AWDP_Discount
 
             // Custom Product List
             $customPL   = $rule['custom_pl'];
-            $pro_id     = ( $product->get_parent_id() == 0 ) ? $product->get_id() : $product->get_parent_id(); 
+            // $pro_id     = ( $product->get_parent_id() == 0 ) ? $product->get_id() : $product->get_parent_id();
+            
+            if ( is_object( $product ) ) {
+                $pro_id    = ( $product->get_parent_id() == 0 ) ? $product->get_id() : $product->get_parent_id();
+            } else {
+                $pro_id    = 0;
+            }
             $prodIDs    = [];   
             
             if ( !empty ( $customPL ) ) {
@@ -1830,10 +1867,16 @@ class AWDP_Discount
         } else {
 
             $this->set_product_list();
-            $pro_id = $product->get_parent_id(); // in case of variation
-            if ($pro_id == 0) {
-                $pro_id = $product->get_id();
-            }
+
+            if ( is_object( $product ) ) {
+                $pro_id    = ( $product->get_parent_id() == 0 ) ? $product->get_id() : $product->get_parent_id();
+            } else {
+				$pro_id    = 0;
+			 }
+            // $pro_id = $product->get_parent_id(); // in case of variation
+            // if ($pro_id == 0) {
+            //     $pro_id = $product->get_id();
+            // }
             return isset($this->product_lists[$rule['product_list']]) &&
                 in_array($pro_id, $this->product_lists[$rule['product_list']]);
                 
@@ -2686,7 +2729,7 @@ class AWDP_Discount
         $result         = '';
         $coupons_amount = 0;
 
-        if ( $this->discounts ) {
+        if ( $this->discounts && apply_filters('wdp_hideMiniCart', true)) {
                 
             foreach ( $this->discounts as $ruleid => $discounts ) { 
 
