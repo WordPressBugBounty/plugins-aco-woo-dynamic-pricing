@@ -1626,23 +1626,59 @@ class AWDP_Api
         }
     }
 
-    function update_product_rule_meta($id, $data)
-    {
+    /**
+     *  Sanitize product rule meta data
+     *  @ver 4.5.9
+     */
+    public function sanitize_product_rule_meta ($meta_data) {
 
-        update_post_meta($id, 'list_type', $data['list_type']);
-        $other_config = array(
-            'selectedProducts'  => isset($data['selectedProducts']) ? $data['selectedProducts'] : '',
-            'productAuthor'     => isset($data['productAuthor']) ? $data['productAuthor'] : '',
-            'excludedProducts'  => isset($data['excludedProducts']) ? $data['excludedProducts'] : '',
-            'taxRelation'       => isset($data['taxRelation']) ? $data['taxRelation'] : '',
-            'rules'             => isset($data['rules']) ? $data['rules'] : '',
-            'selectionMethod'   => isset($data['selectionMethod']) ? $data['selectionMethod'] : '',
-            'sku_search'        => isset($data['sku_search']) ? $data['sku_search'] : '',
-        );
-        update_post_meta($id, 'product_list_config', $other_config);
+        $sanitized_data = [];
 
+        if (!is_array($meta_data)) {
+            return [];
+        }
+
+        foreach ($meta_data as $data) {
+            $sanitized_rule = [
+                'operator' => sanitize_text_field($data['operator']),
+                'rules' => []
+            ];
+
+            if (isset($data['rules']) && is_array($data['rules'])) {
+                foreach ($data['rules'] as $rule) {
+                    $sanitized_sub_rule = [
+                        'operator' => sanitize_text_field($rule['operator']),
+                        'rule' => [
+                            'item' => sanitize_text_field($rule['rule']['item']),
+                            'condition' => sanitize_text_field($rule['rule']['condition']),
+                            'value' => array_map('intval', $rule['rule']['value'])
+                        ]
+                    ];
+                    $sanitized_rule['rules'][] = $sanitized_sub_rule;
+                }
+            }
+
+            $sanitized_data[] = $sanitized_rule;
+        }
+
+        return $sanitized_data;
     }
 
+    function update_product_rule_meta($id, $data)
+    {
+        $sanitized_rules = $this->sanitize_product_rule_meta($data['rules']);
+        update_post_meta($id, 'list_type', sanitize_text_field($data['list_type']));
+        $other_config = array(
+            'selectedProducts'  => isset($data['selectedProducts']) ? array_map('intval', $data['selectedProducts']) : '',
+            'productAuthor'     => isset($data['productAuthor']) ? sanitize_text_field($data['productAuthor']) : '',
+            'excludedProducts'  => isset($data['excludedProducts']) ? array_map('intval', $data['excludedProducts']) : '',
+            'taxRelation'       => isset($data['taxRelation']) ? sanitize_text_field($data['taxRelation']) : '',
+            'rules'             => isset($data['rules']) ? $sanitized_rules : '',
+            'selectionMethod'   => isset($data['selectionMethod']) ? sanitize_text_field($data['selectionMethod']) : '',
+            'sku_search'        => isset($data['sku_search']) ? sanitize_text_field($data['sku_search']) : '',
+        );
+        update_post_meta($id, 'product_list_config', $other_config);
+    }
     
     /**
      * @search parameter - title

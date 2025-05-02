@@ -254,6 +254,8 @@ class AWDP_productGroup
                     $type           = ( $rule['type'] == 'fixed_product_price' ) ? 'fixed' : 'percentage';
                     $result[]       = array ( 'type' => $type, 'value' => $rule['discount'] );
 
+                } else if($rule['type'] == 'cart_quantity') {
+                    $result         = [];
                 }
 
             }

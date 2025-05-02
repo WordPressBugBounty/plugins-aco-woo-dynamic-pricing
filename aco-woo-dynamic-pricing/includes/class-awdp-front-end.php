@@ -204,8 +204,8 @@ class AWDP_Front_End
             add_action( 'wp_ajax_nopriv_wdpDynamicDiscount', array( $this, 'wdpDynamicDiscount') );
 
             // Adding WCPA Filed Value For Quantity Discount
-            // add_action( 'wp_ajax_wcpaQunantity_Discount', array( $this, 'wcpaQunantity_Discount') );
-            // add_action( 'wp_ajax_nopriv_wcpaQunantity_Discount', array( $this, 'wcpaQunantity_Discount') );
+            add_action( 'wp_ajax_wcpaQunantity_Discount', array( $this, 'wcpaQunantity_Discount') );
+            add_action( 'wp_ajax_nopriv_wcpaQunantity_Discount', array( $this, 'wcpaQunantity_Discount') );
 
             // Cart Message
             add_action( 'woocommerce_after_cart_table', array( $this, 'wdpCartMessage') );
@@ -353,12 +353,12 @@ class AWDP_Front_End
 
     }
     
-    // Adding WCPA Filed Value For Quantity Discount
-    // public function wcpaQunantity_Discount() {
+    //Adding WCPA Filed Value For Quantity Discount
+    public function wcpaQunantity_Discount() {
 
-    //     echo $this->discount->wcpaQunantity_Discount();
-    //     die();
-    // }
+        echo $this->discount->wcpaQunantity_Discount();
+        die();
+    }
 
     //Addons Products Price For Quantity Change
     public function wdpDynamicDiscount()

@@ -457,11 +457,11 @@ class AWDP_Discount
         $itemCount          = isset( $_GET['proCount'] ) ? $_GET['proCount'] : 1;
         $this->load_rules();
         $rules              = $this->discount_rules;
-        $resut = [];
+        $result = ['fixed' => 0, 'percentage' => 0];
         foreach ( $rules as $rule ) {
             if ( $rule['type'] == 'cart_quantity') {
-                foreach ($rule['quantity_rules'] as $quantity_rule) {
-                   if($itemCount >= $quantity_rule['start_range'] && $itemCount <= $quantity_rule['end_range']) {
+                foreach ($rule['quantity_rules'] as $quantity_rule) {          
+                   if($itemCount >= $quantity_rule['start_range'] && $itemCount <= $quantity_rule['end_range']) {            
                         if($quantity_rule['dis_type'] == 'percentage') {
                             $value     = $quantity_rule['dis_value'] ? $quantity_rule['dis_value'] / 100 : 0;
                             $result['fixed']      = 0;
@@ -647,12 +647,10 @@ class AWDP_Discount
             array ( $rules, $price, $post_id, $product, $prodLists, $cartRules, $item_price, $display_price ) 
         ); 
 
-        $itemCount = get_option('itemCount', 1);
         $wcpaPrice = call_user_func_array ( 
             array ( new AWDP_productGroup(), 'product_price' ), 
-            array ( $rules, $price, $post_id, $product, $prodLists, $cartRules, $item_price,$itemCount) 
+            array ( $rules, $price, $post_id, $product, $prodLists, $cartRules, $item_price) 
         );
-        update_option('itemCount', 1);
 
         if ( is_array ( $viewPrice ) || is_array ( $wcpaPrice ) ) {
 

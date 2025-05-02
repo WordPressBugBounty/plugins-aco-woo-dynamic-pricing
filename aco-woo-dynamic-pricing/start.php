@@ -1,15 +1,15 @@
 <?php
 /*
  * Plugin Name: Acowebs Woocommerce Dynamic Pricing
- * Version: 4.5.8
+ * Version: 4.5.9
  * Description: Woocommerce Dynamic Pricing helps to apply discounts for woocommerce products. Its sophisticated user interfaces will help to add discounts very easily.
  * Author: Acowebs
  * Author URI: http://acowebs.com
  * Requires at least: 4.4
- * Tested up to: 6.7
+ * Tested up to: 6.8
  * Text Domain: aco-woo-dynamic-pricing
  * WC requires at least: 4.3
- * WC tested up to: 9.7
+ * WC tested up to: 9.8
  * Requires Plugins: woocommerce
  */
 
@@ -19,7 +19,7 @@ define('AWDP_PRODUCT_LIST', 'awdp_pt_products');
 define('AWDP_WC_PRODUCTS', 'product');
 
 define('AWDP_TOKEN', 'awdp');
-define('AWDP_VERSION', '4.5.8');
+define('AWDP_VERSION', '4.5.9');
 define('AWDP_FILE', __FILE__);
 define('AWDP_PLUGIN_NAME', 'Acowebs Woocommerce Dynamic Pricing');
 define('AWDP_PRODUCTS_TRANSIENT_KEY', 'awdp_product_list');
@@ -83,4 +83,3 @@ add_action( 'before_woocommerce_init', function() {
 		\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', __FILE__, true );
 	}
 } );
-
