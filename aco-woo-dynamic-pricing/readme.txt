@@ -6,7 +6,7 @@ Donate link:
 Tags: WooCommerce Dynamic Pricing, WooCommerce Discount rules, WooCommerce Bulk Discounts, WooCommerce Pricing Deals
 Requires at least: 4.4
 Tested up to: 6.8
-Stable tag: 4.5.9
+Stable tag: 4.5.10
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -222,6 +222,8 @@ Yes, you can change the border color to match your theme style. We have also pro
 You will be able to use plugin in your site, but however, you won't be able to receive any further updates and priority support.
 
 == Changelog ==
+= 4.5.10 =
+* Bug fixes
 = 4.5.9 =
 * Added support for WCPA field values in quantity based discounts.
 * Support for WordPress 6.8 and WooCommerce 9.8

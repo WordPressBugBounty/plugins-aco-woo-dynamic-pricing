@@ -67,7 +67,8 @@ if ( !function_exists('awdp_dynamic_value') ) {
                     $dynmcDisc  = array_key_exists ( 'discount', $val ) ? $val['discount'] : ''; 
 
                     if ( !$dynmcDisc ) continue;
-
+                    $allowed_operators = ['AND', 'OR', ''];
+                   
                     foreach ( $val_rules as $rul ) { 
 
                         $evel_str .= '(';
@@ -81,8 +82,10 @@ if ( !function_exists('awdp_dynamic_value') ) {
                         } else {
                             $evel_str .= ' true ';
                         }
+                        $operator = (isset($rul['operator']) && in_array($rul['operator'], $allowed_operators, true)) ? $rul['operator'] :
+                    '';
+                        $evel_str .= ') ' . (($operator !== false) ? $operator : '') . ' ';
 
-                        $evel_str .= ') ' . (($rul['operator'] !== false) ? $rul['operator'] : '') . ' ';
                         
                     }
 
@@ -92,7 +95,7 @@ if ( !function_exists('awdp_dynamic_value') ) {
                     }
 
                     $evel_str = str_replace(['and', 'or'], ['&&', '||'], strtolower($evel_str));
-            
+
                     if ( eval ( 'return ' . $evel_str . ';' ) ) {
 
                         return $dynmcDisc;

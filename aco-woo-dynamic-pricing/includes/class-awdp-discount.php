@@ -1347,7 +1347,7 @@ class AWDP_Discount
         } else {
             $qn_flag = false;
         }
-
+        $allowed_operators = ['AND', 'OR', ''];
         if ( isset($rule['rules']) && is_array($rule['rules']) && !empty($rule['rules']) ) {
 
             foreach ( $rule['rules'] as $val ) {
@@ -1367,16 +1367,18 @@ class AWDP_Discount
                         } else {
                             $evel_str .= ' true ';
                         }
-
-                        $evel_str .= ') ' . (($rul['operator'] !== false) ? $rul['operator'] : '') . ' ';
+                        $operator = (isset($rul['operator']) && in_array($rul['operator'], $allowed_operators, true)) ? $rul['operator'] :
+                            'AND';
+                        $evel_str .= ') ' . (($operator !== false) ? $operator : '') . ' ';
                     }
 
                     if ( count($val['rules']) > 0 && !empty($val['rules']) ) {
                         preg_match_all('/\(.*\)/', $evel_str, $match);
                         $evel_str = $match[0][0] . ' ';
                     }
-
-                    $evel_str .= ') ' . (($val['operator'] !== false) ? $val['operator'] : '') . ' ';
+                    $operator = (isset($val['operator']) && in_array($val['operator'], $allowed_operators, true)) ? $val['operator'] :
+                        'AND';
+                    $evel_str .= ') ' . (($operator !== false) ? $operator : '') . ' ';
 
                 }
 
@@ -1388,7 +1390,7 @@ class AWDP_Discount
             }
 
             $evel_str = str_replace(['and', 'or'], ['&&', '||'], strtolower($evel_str));
-            
+
             if ($evel_str !== '') {
                 $result = eval('return ' . $evel_str . ';');
             }
