@@ -1,15 +1,15 @@
 <?php
 /*
  * Plugin Name: Acowebs Woocommerce Dynamic Pricing
- * Version: 4.5.10
+ * Version: 4.5.11
  * Description: Woocommerce Dynamic Pricing helps to apply discounts for woocommerce products. Its sophisticated user interfaces will help to add discounts very easily.
  * Author: Acowebs
  * Author URI: http://acowebs.com
  * Requires at least: 4.4
- * Tested up to: 6.8
+ * Tested up to: 6.9
  * Text Domain: aco-woo-dynamic-pricing
  * WC requires at least: 4.3
- * WC tested up to: 9.8
+ * WC tested up to: 10.7
  * Requires Plugins: woocommerce
  */
 
@@ -19,7 +19,7 @@ define('AWDP_PRODUCT_LIST', 'awdp_pt_products');
 define('AWDP_WC_PRODUCTS', 'product');
 
 define('AWDP_TOKEN', 'awdp');
-define('AWDP_VERSION', '4.5.10');
+define('AWDP_VERSION', '4.5.11');
 define('AWDP_FILE', __FILE__);
 define('AWDP_PLUGIN_NAME', 'Acowebs Woocommerce Dynamic Pricing');
 define('AWDP_PRODUCTS_TRANSIENT_KEY', 'awdp_product_list');
@@ -39,6 +39,12 @@ if (!function_exists('awdp_init')) {
     {
         $plugin_rel_path = basename(dirname(__FILE__)) . '/languages'; /* Relative to WP_PLUGIN_DIR */
         load_plugin_textdomain('aco-woo-dynamic-pricing', false, $plugin_rel_path);
+
+        new AWDP_Api();
+
+        $discount = new AWDP_Discount();
+
+        new AWDP_Front_End($discount, __FILE__, AWDP_VERSION);
     }
 
 }
@@ -66,16 +72,14 @@ if (!function_exists('AWDP')) {
     }
 
 }
-add_action('plugins_loaded', 'awdp_init');
+
+// add_action('plugins_loaded', 'awdp_init');
+add_action('init', 'awdp_init');
 spl_autoload_register('awdp_autoloader');
 if (is_admin()) {
     AWDP();
 }
-new AWDP_Api();
 
-$discount = new AWDP_Discount();
-
-new AWDP_Front_End($discount, __FILE__, AWDP_VERSION);
 
 
 add_action( 'before_woocommerce_init', function() {
