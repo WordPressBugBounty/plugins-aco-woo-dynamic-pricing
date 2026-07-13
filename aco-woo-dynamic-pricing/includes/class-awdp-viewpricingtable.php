@@ -438,6 +438,7 @@ class AWDP_viewPricingTable {
                 }
 
                 $table .= $discount_description ? '<p class="wdp_helpText">*'.$discount_description.'</p>' : '<p class="wdp_helpText">*'.$awdp_qn_label.' refers to discounted items (products with discount) individual count on cart.</p>';
+                $table .= '</div>'; // Close wdp_table_outter
 
                 // Pricinig Table
                 if ($rule['pricing_table'] == 1 && $pricing_table_price > 0) $this->pricing_table[$item->get_id()][$rule['id']] = $table;
@@ -683,15 +684,16 @@ class AWDP_viewPricingTable {
                     $tr_pr .= '</tr>';
                     if ( $value_display == 'discount_both' ) { 
                         $tr_nw .= '</tr>';
-                        $table .= $tr_qn . $tr_pr . $tr_nw . '</tbody></table></div>';
+                        $table .= $tr_qn . $tr_pr . $tr_nw . '</tbody></table>';
                     } else {
-                        $table .= $tr_qn . $tr_pr . '</tbody></table></div>';
+                        $table .= $tr_qn . $tr_pr . '</tbody></table>';
                     }
                 } else {
-                    $table .= '</tbody></table></div>';
+                    $table .= '</tbody></table>';
                 }
 
                 $table .= $discount_item_description ? '<p class="wdp_helpText">*'.$discount_item_description.'</p>' : '<p class="wdp_helpText">*'.$awdp_qn_label.' refers to discounted items (products with discount) total quantity on cart.</p>';
+                $table .= '</div>'; // Close wdp_table_outter
 
                 // Pricinig Table
                 if ($rule['pricing_table'] == 1 && $pricing_table_price > 0) $this->pricing_table[$item->get_id()][$rule['id']] = $table;

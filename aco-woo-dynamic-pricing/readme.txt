@@ -5,12 +5,15 @@ Contributors: acowebs
 Donate link:
 Tags: WooCommerce Dynamic Pricing, WooCommerce Discount rules, WooCommerce Bulk Discounts, WooCommerce Pricing Deals
 Requires at least: 4.4
-Tested up to: 6.8
-Stable tag: 4.5.11
+Tested up to: 7.0
+Requires PHP: 7.4
+Stable tag: 5.0.0
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
 The Dynamic Pricing With Discount Rules plugin enables bulk discounts for WooCommerce products. Its simple design allows easy setup in minutes.
+
+<strong>Version 5.0.0</strong> introduces a fully redesigned admin experience, a refactored discount engine for improved reliability, and important security and compatibility fixes. We recommend backing up your site before updating from 4.x.
 
 == Description ==
 
@@ -222,6 +225,11 @@ Yes, you can change the border color to match your theme style. We have also pro
 You will be able to use plugin in your site, but however, you won't be able to receive any further updates and priority support.
 
 == Changelog ==
+= 5.0.0 =
+* Major release with a fully redesigned admin interface
+* Improved discount calculation reliability and performance
+* Important security improvements
+* Improved compatibility with block-based carts and Elementor
 = 4.5.11 =
 * Bug fixes
 = 4.5.10 =
@@ -569,3 +577,5 @@ You will be able to use plugin in your site, but however, you won't be able to r
 * Woocomerce discount plugin
 
 == Upgrade Notice ==
+= 5.0.0 =
+This is a major update with a redesigned admin interface and a refactored discount engine. Please back up your site before updating.

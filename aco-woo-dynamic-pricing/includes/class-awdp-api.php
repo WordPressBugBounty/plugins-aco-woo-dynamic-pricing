@@ -201,6 +201,23 @@ class AWDP_Api
                 }
             }
 
+            // Assign next latest priority to the duplicated rule
+            $existing_rules = get_posts(array(
+                'fields'         => 'ids',
+                'posts_per_page' => -1,
+                'post_type'      => AWDP_POST_TYPE,
+                'post__not_in'   => array($newRuleID)
+            ));
+            $max_priority = 0;
+            foreach ($existing_rules as $listID) {
+                $priority = intval(get_post_meta($listID, 'discount_priority', true));
+                if ($priority > $max_priority) {
+                    $max_priority = $priority;
+                }
+            }
+            $next_priority = $max_priority + 1;
+            update_post_meta($newRuleID, 'discount_priority', $next_priority);
+
         }
 
         // Get all badges
@@ -734,6 +751,7 @@ class AWDP_Api
             $pricing_new_label          = $data['pricing_new_label'] ? $data['pricing_new_label'] : '';
             $default_fee_label          = $data['default_fee_label'] ? $data['default_fee_label'] : '';
             $dismessagestatus           = $data['discount_message_status'] ? $data['discount_message_status'] : 0;
+            $dismessageonce             = isset($data['discount_message_once']) ? ($data['discount_message_once'] ? 1 : 0) : 1;
             $message                    = $data['discount_message'] ? $data['discount_message'] : '';
             $tableposition              = $data['tableposition'] ? $data['tableposition'] : '';
             $tablesort                  = $data['tablesort'] ? $data['tablesort'] : '';
@@ -753,17 +771,17 @@ class AWDP_Api
             $dismessage                 = $data['dismessage'] ? $data['dismessage'] : '';
             $dismessage_rule            = $data['dismessage_rule'] ? $data['dismessage_rule'] : '';
             $dismessage_position        = $data['dismessage_position'] ? $data['dismessage_position'] : '';
-            $dismessage_fontsize        = $data['dismessage_fontsize'] ? $data['dismessage_fontsize'] : '';
-            $dismessage_paddding_lm     = $data['dismessage_paddding_lm'] ? $data['dismessage_paddding_lm'] : '';
-            $dismessage_paddding_tp     = $data['dismessage_paddding_tp'] ? $data['dismessage_paddding_tp'] : '';
-            $dismessage_radius          = $data['dismessage_radius'] ? $data['dismessage_radius'] : '';
+            $dismessage_fontsize        = isset($data['dismessage_fontsize']) && $data['dismessage_fontsize'] !== '' ? $data['dismessage_fontsize'] : '';
+            $dismessage_paddding_lm     = isset($data['dismessage_paddding_lm']) && $data['dismessage_paddding_lm'] !== '' ? $data['dismessage_paddding_lm'] : '';
+            $dismessage_paddding_tp     = isset($data['dismessage_paddding_tp']) && $data['dismessage_paddding_tp'] !== '' ? $data['dismessage_paddding_tp'] : '';
+            $dismessage_radius          = isset($data['dismessage_radius']) && $data['dismessage_radius'] !== '' ? $data['dismessage_radius'] : '';
             $dismessage_background      = $data['dismessage_background'] ? $data['dismessage_background'] : '';
             $dismessage_color           = $data['dismessage_color'] ? $data['dismessage_color'] : '';
 
-            $border_top_width           = $data['border_top_width'] ? $data['border_top_width'] : '';
-            $border_right_width         = $data['border_right_width'] ? $data['border_right_width'] : '';
-            $border_bottom_width        = $data['border_bottom_width'] ? $data['border_bottom_width'] : '';
-            $border_left_width          = $data['border_left_width'] ? $data['border_left_width'] : '';
+            $border_top_width           = isset($data['border_top_width']) && $data['border_top_width'] !== '' ? $data['border_top_width'] : '';
+            $border_right_width         = isset($data['border_right_width']) && $data['border_right_width'] !== '' ? $data['border_right_width'] : '';
+            $border_bottom_width        = isset($data['border_bottom_width']) && $data['border_bottom_width'] !== '' ? $data['border_bottom_width'] : '';
+            $border_left_width          = isset($data['border_left_width']) && $data['border_left_width'] !== '' ? $data['border_left_width'] : '';
             $offer_border_color         = $data['offer_border_color'] ? $data['offer_border_color'] : '';
 
             //TimeZone
@@ -908,6 +926,11 @@ class AWDP_Api
             else
                 update_option('awdp_message_status', $dismessagestatus);
 
+            if ( false === get_option('awdp_message_once') )
+                add_option('awdp_message_once', $dismessageonce, '', 'yes');
+            else
+                update_option('awdp_message_once', $dismessageonce);
+
             if ( false === get_option('awdp_discount_message') )
                 add_option('awdp_discount_message', $message, '', 'yes');
             else
@@ -1045,6 +1068,7 @@ class AWDP_Api
         $result['discount_item_description']    = $discount_item_description;
         $result['default_fee_label']            = get_option('awdp_fee_label') ? get_option('awdp_fee_label') : '';
         $result['discount_message_status']      = get_option('awdp_message_status') ? get_option('awdp_message_status') : '';
+        $result['discount_message_once']        = ( get_option('awdp_message_once') !== false ) ? get_option('awdp_message_once') : 1;
         $result['discount_message']             = get_option('awdp_discount_message') ? get_option('awdp_discount_message') : '';
         $result['tableposition']                = get_option('awdp_table_position') ? get_option('awdp_table_position') : ( get_option('tableposition') ? get_option('tableposition') : '' );
         $result['tablesort']                    = get_option('awdp_table_sort') ? get_option('awdp_table_sort') : '';
@@ -1115,6 +1139,35 @@ class AWDP_Api
     {
         $this->delete_transient();
         $data = $data->get_params();
+
+        $rule_name = isset($data['name']) ? trim($data['name']) : '';
+        $discount_type = isset($data['discount_type']) ? trim($data['discount_type']) : '';
+
+        if ( empty($rule_name) || empty($discount_type) ) {
+            return new WP_Error(
+                'rest_rule_invalid',
+                __( 'Rule Name and Discount Type are required.', 'aco-woo-dynamic-pricing' ),
+                array( 'status' => 400 )
+            );
+        }
+
+        if ( $discount_type === 'cart_quantity' && isset($data['quantityranges']) && is_array($data['quantityranges']) ) {
+            foreach ( $data['quantityranges'] as $range ) {
+                $start = isset($range['start_range']) ? trim($range['start_range']) : '';
+                $end = isset($range['end_range']) ? trim($range['end_range']) : '';
+                
+                if ( $start !== '' && $end !== '' && is_numeric($start) && is_numeric($end) ) {
+                    if ( floatval($start) > floatval($end) ) {
+                        return new WP_Error(
+                            'rest_rule_invalid_range',
+                            __( 'From value cannot be greater than To value.', 'aco-woo-dynamic-pricing' ),
+                            array( 'status' => 400 )
+                        );
+                    }
+                }
+            }
+        }
+
         if ($data['id']) {
             $my_post = array(
                 'ID'            => $data['id'],
@@ -1167,12 +1220,18 @@ class AWDP_Api
         $wdp_show_in_loop   = isset($data['show_in_loop']) ? $data['show_in_loop'] : '';
         $wdp_rules          = isset($data['rules']) ? $data['rules'] : '';
         $wdp_quantity_type  = isset($data['quantity_type']) ? $data['quantity_type'] : '';
+        if ( $wdp_discount_type === 'cart_quantity' && empty( $wdp_quantity_type ) ) {
+            $wdp_quantity_type = 'type_product';
+        }
         $wdp_weekday        = isset($data['discount_schedule_weekday']) ? $data['discount_schedule_weekday'] : '';
 
         $start_time         = isset($data['startTime']) ? date('H:i', strtotime($data['startTime'] )) : '';
         $end_time           = isset($data['endTime']) ? date('H:i', strtotime($data['endTime'] )) : '';
         
         $table_layout       = isset($data['table_layout']) ? $data['table_layout'] : '';
+        if ( $wdp_discount_type === 'cart_quantity' && empty( $table_layout ) ) {
+            $table_layout = 'vertical';
+        }
 
         $disc_calc_type     = isset($data['disc_calc_type']) ? $data['disc_calc_type'] : '';
 
@@ -1270,6 +1329,9 @@ class AWDP_Api
         if (isset($data['id'])) {
             $result             = array();
             $discount_rule      = get_post($data['id']);
+            if ( !$discount_rule || is_wp_error($discount_rule) || get_post_type($discount_rule) !== AWDP_POST_TYPE ) {
+                return new WP_Error( 'rest_rule_not_found', __( 'Rule not found or is invalid.', 'aco-woo-dynamic-pricing' ), array( 'status' => 404 ) );
+            }
             $discount_config    = get_post_meta($discount_rule->ID, 'discount_config', true) ? get_post_meta($discount_rule->ID, 'discount_config', true) : [];
 
             // Scheduling dates
@@ -1319,13 +1381,15 @@ class AWDP_Api
                         }
                     } 
                     if( $taxvalues != '' ) { 
-                        $defaultTax = $wpdb->get_results ( "SELECT DISTINCT cat.term_id as value, cat.name as label FROM {$wpdb->prefix}terms cat LEFT JOIN {$wpdb->prefix}term_taxonomy cattax ON cat.term_id = cattax.term_id WHERE cattax.term_id IN (" . $taxvalues . ")" ); 
+                        $safe_taxvalues = implode( ',', array_map( 'intval', explode( ',', $taxvalues ) ) );
+                        $defaultTax = $wpdb->get_results( "SELECT DISTINCT cat.term_id as value, cat.name as label FROM {$wpdb->prefix}terms cat LEFT JOIN {$wpdb->prefix}term_taxonomy cattax ON cat.term_id = cattax.term_id WHERE cattax.term_id IN (" . $safe_taxvalues . ")" ); 
                         foreach ( $defaultTax as $dtax ) {
                             $dtax->label = html_entity_decode ( $dtax->label );
                         }
                     } 
                     if( $prodvalues != '' ) { 
-                        $defaultProducts = $wpdb->get_results ( "SELECT DISTINCT ID as value, post_title as label FROM {$wpdb->prefix}posts WHERE ID IN (" . $prodvalues . ")" );
+                        $safe_prodvalues = implode( ',', array_map( 'intval', explode( ',', $prodvalues ) ) );
+                        $defaultProducts = $wpdb->get_results( "SELECT DISTINCT ID as value, post_title as label FROM {$wpdb->prefix}posts WHERE ID IN (" . $safe_prodvalues . ")" );
                         foreach ( $defaultProducts as $dprod ) { 
                             $status = get_post_status ( $dprod->value );
                             if ( $status === 'draft' ) {
@@ -1515,7 +1579,8 @@ class AWDP_Api
                         $ar_cnt++;
                     } 
                     if( $values != '' ) { 
-                        $tax = $wpdb->get_results ( "SELECT DISTINCT cat.term_id as value, cat.name as label FROM {$wpdb->prefix}terms cat LEFT JOIN {$wpdb->prefix}term_taxonomy cattax ON cat.term_id = cattax.term_id WHERE cattax.term_id IN (" . $values . ")" ); 
+                        $safe_values = implode( ',', array_map( 'intval', explode( ',', $values ) ) );
+                        $tax = $wpdb->get_results( "SELECT DISTINCT cat.term_id as value, cat.name as label FROM {$wpdb->prefix}terms cat LEFT JOIN {$wpdb->prefix}term_taxonomy cattax ON cat.term_id = cattax.term_id WHERE cattax.term_id IN (" . $safe_values . ")" ); 
                     }
                 }
 

@@ -47,7 +47,7 @@ if ( !function_exists('awdp_dynamic_value') ) {
                         $wdp_cart_items     = $wdp_cart_items + $cart_item['quantity'];
                         $wdp_cart_quantity  = $wdp_cart_quantity + 1;
                         // check Product List
-                        if ( !empty ( $applicable_products ) && in_array ( $cart_item['product_id'], $applicable_products ) ) { 
+                        if ( ( !$list_id || $list_id == 'null' ) || ( !empty ( $applicable_products ) && in_array ( $cart_item['product_id'], $applicable_products ) ) ) { 
                             $wdp_cart_totals_pl    = $wdp_cart_totals_pl + $cart_item['data']->get_price() * $cart_item['quantity'];
                             $wdp_cart_items_pl     = $wdp_cart_items_pl + $cart_item['quantity'];
                             $wdp_cart_quantity_pl  = $wdp_cart_quantity_pl + 1;
@@ -183,6 +183,22 @@ if ( !function_exists('awdp_combinations') ) {
 
             return false;
 
+        }
+
+        if ( $item_val <= 0 ) {
+            switch ($rulCond) {
+                case 'equal_to':
+                    return ( $item_val == $rel_val );
+                case 'less_than':
+                    return ( $item_val < $rel_val );
+                case 'less_than_eq':
+                    return ( $item_val <= $rel_val );
+                case 'greater_than': 
+                    return ( $item_val > $rel_val );
+                case 'greater_than_eq':
+                    return ( $item_val >= $rel_val );
+            }
+            return false;
         }
 
         switch ($rulCond) {

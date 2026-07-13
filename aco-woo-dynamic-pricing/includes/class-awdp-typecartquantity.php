@@ -261,18 +261,31 @@ class AWDP_typeCartQuantity
                     $cartPSlug              = $cartView ? $cartData['slug'] : $cart_content['key']; 
                     $cart_id                = $cart_content['data']->get_ID();
                     $prod_QNT[$cartPSlug]   = $cart_content['quantity'];
-                    $prod_QNTIDs[$cart_id]  = $cart_content['quantity'];
+                    /*
+                    * Fix: Accumulate instead of overwrite.
+                    * When WooCommerce variations use wildcard ("Any...") attributes, multiple
+                    * distinct cart line items can share the same variation post ID. Using
+                    * assignment (=) was overwriting the quantity; we now accumulate (+=) so
+                    * that all matching line items are counted correctly regardless of how
+                    * the merchant has configured the product variations.
+                    */
+                    if ( isset( $prod_QNTIDs[ $cart_id ] ) ) {
+                        $prod_QNTIDs[ $cart_id ] += $cart_content['quantity'];
+                    } else {
+                        $prod_QNTIDs[ $cart_id ]  = $cart_content['quantity'];
+                    }
                 }
             }
 
-            // todo - backedn variation check
+            // Variation check: sum all variation quantities into a single total
             if ( $variation_check && array_key_exists ( $cartKey, $prod_QNT ) ) { 
 
                 $newProd    = $disc_prod_ID ? wc_get_product ( $disc_prod_ID ) : $item;
                 $var_pid    = wp_get_post_parent_id ( $disc_prod_ID );
                 $act_qnty   = 0;
 
-                if ( $newProd->is_type('variable') ) { 
+                if ( $newProd && $newProd->is_type('variable') ) {
+
                     $VCheckFlag = true;
                     $varIDs = call_user_func_array ( 
                         array ( new AWDP_Discount(), 'wdpGetVariations' ), 
@@ -285,7 +298,27 @@ class AWDP_typeCartQuantity
                             }
                         }
                     }
-                } else if ( $var_pid != 0 ) { 
+
+                    /*
+                    * Fallback for wildcard ("Any...") attribute variations.
+                    * WooCommerce only creates one variation post (e.g. "Any Color / Any Size")
+                    * for wildcard combinations. wdpGetVariations() will only return that single
+                    * post ID, but multiple cart line items can reference it and each of those
+                    * is already accumulated in $prod_QNTIDs via the fix above.
+                    * As an additional safety net, if act_qnty is still 0 (e.g. variation post
+                    * was not published in the DB query), we fall back to summing by parent
+                    * product_id directly from the cart contents.
+                    */
+                    if ( $act_qnty === 0 ) {
+                        foreach ( $cart_contents as $cc ) {
+                            if ( (int) $cc['product_id'] === (int) $item_id ) {
+                                $act_qnty += $cc['quantity'];
+                            }
+                        }
+                    }
+
+                } else if ( $var_pid != 0 ) {
+
                     $VCheckFlag = true;
                     $varIDs = call_user_func_array ( 
                         array ( new AWDP_Discount(), 'wdpGetVariations' ), 
@@ -298,6 +331,20 @@ class AWDP_typeCartQuantity
                             }
                         }
                     }
+
+                    /*
+                    * Fallback: for the same wildcard-variation reason described above,
+                    * if act_qnty is still 0 after iterating known variation IDs, sum all
+                    * cart items that belong to the same parent variable product.
+                    */
+                    if ( $act_qnty === 0 ) {
+                        foreach ( $cart_contents as $cc ) {
+                            if ( (int) $cc['product_id'] === (int) $var_pid ) {
+                                $act_qnty += $cc['quantity'];
+                            }
+                        }
+                    }
+
                 } else {
                     $act_qnty = $prod_QNT[$cartKey];
                 }

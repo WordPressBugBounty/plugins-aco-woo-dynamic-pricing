@@ -109,6 +109,10 @@ class AWDP_Backend
 
         add_action('admin_footer', array($this, 'wdp_deactivation_form'));
 
+        // Major update notice on the Plugins screen.
+        add_filter('in_plugin_update_message_' . plugin_basename($this->file), array($this, 'major_update_notice'), 10, 2);
+        add_action('admin_head-plugins.php', array($this, 'major_update_notice_styles'));
+
         //Body Class
         add_filter( 'admin_body_class', array($this, 'wdp_admin_class' ));
         
@@ -118,12 +122,57 @@ class AWDP_Backend
     * ver @ 4.3.1
     * Body Class
     */
+    public function major_update_notice($plugin_data, $response)
+    {
+        if (empty($plugin_data['new_version'])) {
+            return;
+        }
+
+        $installed = get_option($this->_token . '_version', AWDP_VERSION);
+
+        if (
+            version_compare($plugin_data['new_version'], '5.0.0', '>=') &&
+            version_compare($installed, '5.0.0', '<')
+        ) {
+            printf(
+                '<br><span class="awdp-major-update-notice">%s</span>',
+                esc_html__(
+                    'Major update: this release includes a redesigned admin UI and refactored discount engine. Back up your site before updating.',
+                    'aco-woo-dynamic-pricing'
+                )
+            );
+        }
+    }
+
+    public function major_update_notice_styles()
+    {
+        echo '<style>
+            .awdp-major-update-notice {
+                display: inline-block;
+                margin-top: 4px;
+                padding: 4px 8px;
+                font-size: 12px;
+                line-height: 1.4;
+                color: #646970;
+                background: #f6f7f7;
+                border-left: 3px solid #dba617;
+                border-radius: 2px;
+            }
+        </style>';
+    }
+
     public function wdp_admin_class($classes) {
         
         $currentScreen = get_current_screen();
         $screenID = $currentScreen->id; //
         if ( strpos ( $screenID, 'awdp_' ) !== false ) {
-            $classes .= ( strpos ( $screenID, 'product_lists' ) !== false && strpos ( $classes, 'pricing-rules' ) === false ) ? ' pricing-rules_page_awdp_admin_product_lists' : ( ( strpos ( $screenID, 'settings' ) !== false && strpos ( $classes, 'pricing-rules' ) === false ) ? ' pricing-rules_page_awdp_ui_settings' : '' );
+            if ( strpos ( $screenID, 'product_lists' ) !== false && strpos ( $classes, 'pricing-rules' ) === false ) {
+                $classes .= ' pricing-rules_page_awdp_admin_product_lists';
+            } elseif ( strpos ( $screenID, 'settings' ) !== false && strpos ( $classes, 'pricing-rules' ) === false ) {
+                $classes .= ' pricing-rules_page_awdp_ui_settings';
+            } elseif ( strpos ( $screenID, 'help' ) !== false && strpos ( $classes, 'pricing-rules' ) === false ) {
+                $classes .= ' pricing-rules_page_awdp_ui_help';
+            }
         }
         return $classes;
     }
@@ -278,6 +327,7 @@ class AWDP_Backend
                 wp_localize_script($this->_token . '-backend-script', 'awdp_object', array(
                         'api_nonce'     => wp_create_nonce('wp_rest'),
                         'root'          => rest_url('awdp/v1/'),
+                        'adminUrl'      => admin_url(),
                         'cats'          => (array)$categories,
                         'tags'          => (array)$taglist,
                         'productlist'   => (array)$awdpList,

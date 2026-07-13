@@ -1,15 +1,16 @@
 <?php
 /*
  * Plugin Name: Acowebs Woocommerce Dynamic Pricing
- * Version: 4.5.11
+ * Version: 5.0.0
  * Description: Woocommerce Dynamic Pricing helps to apply discounts for woocommerce products. Its sophisticated user interfaces will help to add discounts very easily.
  * Author: Acowebs
  * Author URI: http://acowebs.com
  * Requires at least: 4.4
- * Tested up to: 6.9
+ * Tested up to: 7.0
+ * Requires PHP: 7.4
  * Text Domain: aco-woo-dynamic-pricing
  * WC requires at least: 4.3
- * WC tested up to: 10.7
+ * WC tested up to: 10.9
  * Requires Plugins: woocommerce
  */
 
@@ -19,7 +20,7 @@ define('AWDP_PRODUCT_LIST', 'awdp_pt_products');
 define('AWDP_WC_PRODUCTS', 'product');
 
 define('AWDP_TOKEN', 'awdp');
-define('AWDP_VERSION', '4.5.11');
+define('AWDP_VERSION', '5.0.0');
 define('AWDP_FILE', __FILE__);
 define('AWDP_PLUGIN_NAME', 'Acowebs Woocommerce Dynamic Pricing');
 define('AWDP_PRODUCTS_TRANSIENT_KEY', 'awdp_product_list');
@@ -57,6 +58,15 @@ if (!function_exists('awdp_autoloader')) {
         if (0 === strpos($class_name, 'AWDP')) {
             $classes_dir = realpath(plugin_dir_path(__FILE__)) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR;
             $class_file = 'class-' . str_replace('_', '-', strtolower($class_name)) . '.php';
+
+            if (0 === strpos($class_name, 'AWDP_Discount_')) {
+                $discount_file = $classes_dir . 'discount' . DIRECTORY_SEPARATOR . $class_file;
+                if (file_exists($discount_file)) {
+                    require_once $discount_file;
+                    return;
+                }
+            }
+
             require_once $classes_dir . $class_file;
         }
     }
