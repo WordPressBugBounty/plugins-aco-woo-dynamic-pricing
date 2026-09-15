@@ -306,7 +306,6 @@ class AWDP_Discount_Rules extends AWDP_Discount_Module
 
             }
 
-            $stop_date  = date('Y-m-d H:i:s', strtotime($datenow . ' +1 day'));
             $day        = date("l");
 
             $awdp_discount_args = array(
@@ -381,8 +380,7 @@ class AWDP_Discount_Rules extends AWDP_Discount_Module
 
             $awdp_discount_rules    = get_posts($awdp_discount_args); 
 
-            $current_user           = is_user_logged_in() ? wp_get_current_user() : '';
-            $user_roles             = $current_user ? ( array ) $current_user->roles : [];
+            $user_roles             = awdp_get_current_discount_user_roles();
             
             $discount_rules = $check_rules = array();
 
@@ -398,11 +396,12 @@ class AWDP_Discount_Rules extends AWDP_Discount_Module
                     if ( $schedules ) { 
                         foreach ( $schedules as $schedule ) {
                             $mn_start_time      = date('H:i' , strtotime($schedule['start_date'])); 
-                            $mn_end_time        = date('H:i' , strtotime($schedule['end_date'])); 
+                            $mn_end_time        = !empty($schedule['end_date']) ? date('H:i' , strtotime($schedule['end_date'])) : ''; 
                             $current_time       = strtotime(gmdate('H:i'));
                             $awdp_start_date    = $schedule['start_date'];
-                            $awdp_end_start     = $schedule['end_date'] ? $schedule['end_date'] : $stop_date;
-                            if ( ( $awdp_start_date <= $datenow ) && ( $awdp_end_start >= $datenow ) && !in_array( $awdpID, $check_rules ) ) {
+                            $awdp_end_date      = !empty($schedule['end_date']) ? $schedule['end_date'] : '';
+                            $is_open_ended      = ( $awdp_end_date === '' );
+                            if ( ( $awdp_start_date <= $datenow ) && ( $is_open_ended || $awdp_end_date >= $datenow ) && !in_array( $awdpID, $check_rules ) ) {
                                 $rule_type          = get_post_meta($awdpID, 'discount_type', true);
                                 $discount_config    = get_post_meta($awdpID, 'discount_config', true);
                                 $check_rules[]      = $awdpID; // remove repeated entry - single rule
@@ -754,8 +753,7 @@ class AWDP_Discount_Rules extends AWDP_Discount_Module
                 return false;
             } 
             
-            // Check if User if Logged-In
-            if ( ( intval ( $rule['discount_reg_customers'] ) === 1 && !is_user_logged_in() ) || ( intval ( $rule['discount_reg_customers'] ) === 1 && is_user_logged_in() && ( !empty ( array_filter ( $rule['discount_reg_user_roles'] ) ) && empty ( array_intersect ( $rule['discount_cur_user_roles'], $rule['discount_reg_user_roles'] ) ) ) ) ) { 
+            if ( ! awdp_user_qualifies_for_discount_rule( $rule ) ) {
                 return false;
             }
 

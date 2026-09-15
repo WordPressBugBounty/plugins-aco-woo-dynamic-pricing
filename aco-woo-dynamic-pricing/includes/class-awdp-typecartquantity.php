@@ -32,7 +32,11 @@ class AWDP_typeCartQuantity
         $parent_id                  = $item->get_parent_id();
         $discount = $table = $tr_qn = $tr_pr = '';
         $rules_to_validate          = ['cart_total_amount', 'cart_total_amount_all_prods', 'product_price'];
-        $price                      = ( $dispPrice != '' && $dispPrice < $price ) ? wc_add_number_precision($dispPrice) : wc_add_number_precision($price);
+        $product_price_precision    = wc_add_number_precision( $price );
+        // $dispPrice = WCPA-discountable unit (cart price minus excludeFromDiscount). Same as $price when no exclusion.
+        $disc_calc_price            = is_numeric( $dispPrice ) ? wc_add_number_precision( $dispPrice ) : $product_price_precision;
+        $excluded_precision         = max( 0, $product_price_precision - $disc_calc_price );
+        $price                      = $disc_calc_price;
         
         // $item = ( $parent_id == 0 ) ? $item : wc_get_product( $parent_id );
 
@@ -417,6 +421,7 @@ class AWDP_typeCartQuantity
 
             $actual_qnty                        = array_key_exists ( $cartKey, $prod_QNT ) ? $prod_QNT[$cartKey] : $quantity;
 
+            // Discount amount is taken from the discountable portion only ($price === $disc_calc_price).
             // $discVariable['discounts'][$cartKey]['discount']        = $discount_amt;
             // $discVariable['discounts'][$cartKey]['discount']        = wc_add_number_precision ( (float)$discount_amt );;
             $discVariable['discounts'][$cartKey]['discount']        = (float)$discount_amt;
@@ -425,11 +430,18 @@ class AWDP_typeCartQuantity
             $discVariable['discounts'][$cartKey]['productid']       = $disc_prod_ID;
             $discVariable['taxable']                                = $rule['inc_tax'];
 
-            $updated_product_price                                  = '';
+            // Keep $updated_product_price from the matching tier (do not blank).
+            // Excluded WCPA amounts are re-added below before set_price / display.
 
         }
 
         $result['productDiscount']              = $discVariable;
+        // Re-add WCPA amounts marked excludeFromDiscount after discounting the product portion only.
+        // Mirrors AWDP_typeProductPrice: discountedprice = disc_calc result + excluded_precision.
+        if ( $updated_product_price !== '' && $updated_product_price !== null ) {
+            $updated_product_price += $excluded_precision;
+        }
+
         $result['discountedprice']              = $updated_product_price;
 
         return $result;

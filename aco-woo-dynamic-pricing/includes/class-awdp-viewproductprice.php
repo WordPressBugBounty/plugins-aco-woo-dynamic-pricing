@@ -72,8 +72,7 @@ class AWDP_viewProductPrice
                     continue;
                 }
 
-                // Check if User if Logged-In
-                if ( ( intval ( $rule['discount_reg_customers'] ) === 1 && !is_user_logged_in() ) || ( intval ( $rule['discount_reg_customers'] ) === 1 && is_user_logged_in() && ( !empty ( array_filter ( $rule['discount_reg_user_roles'] ) ) && empty ( array_intersect ( $rule['discount_cur_user_roles'], $rule['discount_reg_user_roles'] ) ) ) ) ) { 
+                if ( ! awdp_user_qualifies_for_discount_rule( $rule ) ) {
                     continue;
                 }
 
@@ -133,17 +132,31 @@ class AWDP_viewProductPrice
                     $max_price = $product->get_variation_price( 'max', true );
                     $min_price = $product->get_variation_price( 'min', true );
 
+                    // Display-only strikeout: sale/active range by default, regular range when setting is on.
+                    $strike_min = $min_price;
+                    $strike_max = $max_price;
+                    if ( awdp_use_regular_as_strikeout() ) {
+                        $reg_min = $product->get_variation_regular_price( 'min', true );
+                        $reg_max = $product->get_variation_regular_price( 'max', true );
+                        if ( $reg_min !== '' && $reg_min !== false && $reg_min !== null ) {
+                            $strike_min = $reg_min;
+                        }
+                        if ( $reg_max !== '' && $reg_max !== false && $reg_max !== null ) {
+                            $strike_max = $reg_max;
+                        }
+                    }
+
                     if ( $min_price == $mindiscountprice && $max_price == $maxdiscountprice ) {
                         return $item_price;
                     } else {
                         if ( $maxdiscountprice !== $mindiscountprice ) {
                             $item_price = '<p class="price">';
-                            $item_price .= '<del><span class="woocommerce-Price-amount amount"><span class="woocommerce-Price-currencySymbol">'.wc_format_price_range( $min_price, $max_price ).'</del> <ins><span class="woocommerce-Price-amount amount"><span class="woocommerce-Price-currencySymbol">'.wc_format_price_range( $mindiscountprice, $maxdiscountprice ).'</ins>';
+                            $item_price .= '<del><span class="woocommerce-Price-amount amount"><span class="woocommerce-Price-currencySymbol">'.wc_format_price_range( $strike_min, $strike_max ).'</del> <ins><span class="woocommerce-Price-amount amount"><span class="woocommerce-Price-currencySymbol">'.wc_format_price_range( $mindiscountprice, $maxdiscountprice ).'</ins>';
                             $item_price .= $suffixText;
                             $item_price .= '</p>';
                             $FeedPrice  = $maxdiscountprice;
                         }  else if ( $maxdiscountprice == $mindiscountprice && $mindiscountprice < $min_price ) {
-                            $item_price = wc_format_sale_price ( $min_price * $converted_rate, $mindiscountprice * $converted_rate ).$suffixText;
+                            $item_price = wc_format_sale_price ( $strike_min * $converted_rate, $mindiscountprice * $converted_rate ).$suffixText;
                             $FeedPrice  = $mindiscountprice;
                         } else {
                             $item_price = wc_price( $mindiscountprice ).$suffixText;

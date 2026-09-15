@@ -46,9 +46,19 @@ class AWDP_Discount_Display extends AWDP_Discount_Module
         $discountProductMaxPrice    = $this->owner->discountProductMaxPrice;
         $discountProductMinPrice    = $this->owner->discountProductMinPrice; 
 
-        // if( $this->owner->converted_rate == '' && $item->get_ID() != '' ) {
-        //     $this->owner->converted_rate = $this->owner->utilities->get_con_unit($item, $price, true);
-        // }
+        // Variable products often have an empty parent price — use variation price range.
+        if ( ( $price == '' || $price == 0 ) && $product->is_type( 'variable' ) ) {
+            $variation_price_map = $product->get_variation_prices( true );
+            if ( ! empty( $variation_price_map['price'] ) ) {
+                $price = (float) min( $variation_price_map['price'] );
+                if ( ! $discountProductMinPrice ) {
+                    $discountProductMinPrice = (float) min( $variation_price_map['price'] );
+                }
+                if ( ! $discountProductMaxPrice ) {
+                    $discountProductMaxPrice = (float) max( $variation_price_map['price'] );
+                }
+            }
+        }
 
         if ( $price == '' || $price == 0 ) return '';
 
@@ -110,13 +120,8 @@ class AWDP_Discount_Display extends AWDP_Discount_Module
         $variations         = $this->owner->variations;
         $cartRules          = $this->owner->awdp_cart_rules; 
         
-        // Display regular price instead of sale price @ ver 4.3.3
-        $displayPrcIncTax   = ( 'incl' === $tax_display_mode ) ? wc_get_price_including_tax( $product, array('price' => $product->get_regular_price() ) ) : wc_get_price_excluding_tax( $product, array('price' => $product->get_regular_price() ) );
-        $addition_settings  = get_option('awdp_addition_settings') ? get_option('awdp_addition_settings') : [];
-        // $use_regular        = array_key_exists ( 'use_regular', $addition_settings ) ? $addition_settings['use_regular'] : false;
-        // $display_price      = $use_regular ? ( $displayPrcIncTax ? $displayPrcIncTax : $product->get_regular_price() ) : '';
-        // $display_price      = $displayPrcIncTax ? $displayPrcIncTax : $product->get_regular_price();
-        $display_price      = '';
+        // Display-only original/struck-through price (sale by default; regular when setting is on).
+        $display_price      = awdp_get_product_strikeout_display_price( $product );
 
         // if( $this->owner->converted_rate == '' && $item->get_ID() != '' ) {
         //     $this->owner->converted_rate = $this->owner->utilities->get_con_unit($item, $price, true);
@@ -187,14 +192,7 @@ class AWDP_Discount_Display extends AWDP_Discount_Module
                 // Check if this rule is applicable to the current product
                 $checkItem = $this->owner->rules->get_items_to_apply_discount ( $product, $rule );
                 if ( $checkItem ) {
-                    // Check if User is Logged-In and user roles match (similar to checks in price calculation)
-                    if ( ( intval ( $rule['discount_reg_customers'] ) === 1 && !is_user_logged_in() ) || 
-                         ( intval ( $rule['discount_reg_customers'] ) === 1 && is_user_logged_in() && 
-                           ( !empty ( array_filter ( $rule['discount_reg_user_roles'] ) ) && 
-                             empty ( array_intersect ( $rule['discount_cur_user_roles'], $rule['discount_reg_user_roles'] ) ) 
-                           ) 
-                         ) 
-                    ) {
+                    if ( ! awdp_user_qualifies_for_discount_rule( $rule ) ) {
                         continue;
                     }
 
@@ -252,105 +250,166 @@ class AWDP_Discount_Display extends AWDP_Discount_Module
  
     }
 
-    // Cart Message
+    /**
+     * Total Dynamic Pricing savings for the current cart (line-price + coupon discounts).
+     *
+     * @return float
+     */
+    public function get_cart_saved_amount()
+    {
+        $total = 0.0;
 
-    public function wdpCartMessage(){
-        
-        global $woocommerce; 
-        $coupon         = get_option('awdp_fee_label') ? get_option('awdp_fee_label') : 'Discount'; 
-        $coupon_code    = apply_filters('woocommerce_coupon_code', $coupon);
-        $customStyle    = '';
-        $result         = '';
-        $total          = 0; 
+        if ( empty( $this->owner->discounts ) || ! WC()->cart ) {
+            return $total;
+        }
 
-        $checkML        = call_user_func ( array ( new AWDP_ML(), 'is_default_lan' ), '' );
-        $currentLang    = !$checkML ? call_user_func ( array ( new AWDP_ML(), 'current_language' ), '' ) : '';
-        $langSettings   = get_option('awdp_settings_lang_options') ? get_option('awdp_settings_lang_options') : [];
-
-        if ( in_array ( $coupon_code, $woocommerce->cart->get_applied_coupons() ) ) {
-
-            if ( $this->owner->discounts ) {
-                
-                foreach ( $this->owner->discounts as $ruleid => $discounts ) { 
-
-                    $discount_type = $discounts['discount_type'];
-                    $qn_type       = ( $discount_type == 'cart_quantity' ) ? get_post_meta ( $ruleid, 'discount_quantity_type', true ) : '';
-
-                    if ( array_key_exists ( 'discounts', $discounts ) ) { 
-
-                        foreach ( $discounts['discounts'] as $key => $discount ) { 
-
-                            $disc_product_ID = $discount['productid'];
-
-                            if ( $discount['discount'] != '' ) {
-                                // Decimal Round
-                                $decimal_val    = $discount['discount'] - floor($discount['discount']);
-                                $calc_discount  = ( $decimal_val == 0 ) ? $discount['discount'] : ( ( $decimal_val > 0.5 ) ? ceil ( $discount['discount'] ) : floor ( $discount['discount'] ) );
-
-                                if ( $discount_type == 'fixed_product_price' || $discount_type == 'percent_product_price' || ( $discount_type == 'cart_quantity' && $qn_type == 'type_product' ) ) {
-                                    $calc_discount = $calc_discount * $discount['quantity'];
-                                }
-
-                                $total                  = $total + ( wc_remove_number_precision ( $calc_discount ) );
-
-                            }
-
-                        }
-
-                    }
-
-                }
-
+        foreach ( $this->owner->discounts as $ruleid => $discounts ) {
+            if ( empty( $discounts['discounts'] ) || ! is_array( $discounts['discounts'] ) ) {
+                continue;
             }
-                
-            // $coupons_obj                = new WC_Coupon($coupon_code);
-            // $coupons_amount             = $coupons_obj->get_amount();
-            $coupons_amount             = $total;
-            $custom_message_settings    = get_option('awdp_custom_msg_settings') ? get_option('awdp_custom_msg_settings') : [];
-            $custom_message_status      = array_key_exists ( 'custom_message_status', $custom_message_settings ) ? $custom_message_settings['custom_message_status'] : false;
 
-            if ( $coupons_amount > 0 && $custom_message_status ) {
+            $discount_type = isset( $discounts['discount_type'] ) ? $discounts['discount_type'] : '';
 
-                /*
-                * ver @ 4.4.8
-                * WMPL Support custom message
-                */
-                if ( !empty ($langSettings) && array_key_exists ( $currentLang, $langSettings ) ) {
-                    $custom_message         = array_key_exists ( 'custom_message', $langSettings[$currentLang] ) ? $langSettings[$currentLang]['custom_message'] : ( array_key_exists ( 'custom_message', $custom_message_settings ) ? $custom_message_settings['custom_message'] : '' );
-                } else {
-                    $custom_message         = array_key_exists ( 'custom_message', $custom_message_settings ) ? $custom_message_settings['custom_message'] : '';
+            foreach ( $discounts['discounts'] as $discount ) {
+                if ( ! isset( $discount['discount'] ) || $discount['discount'] === '' || $discount['discount'] === null ) {
+                    continue;
                 }
 
-                // $custom_message                       = array_key_exists ( 'custom_message', $custom_message_settings ) ? $custom_message_settings['custom_message'] : '';
-                $custom_message_linheight             = array_key_exists ( 'custom_message_linheight', $custom_message_settings ) ? $custom_message_settings['custom_message_linheight'] : '';
-                $custom_message_fontsize              = array_key_exists ( 'custom_message_fontsize', $custom_message_settings ) ? $custom_message_settings['custom_message_fontsize'] : '';
-                $custom_message_position              = array_key_exists ( 'custom_message_position', $custom_message_settings ) ? $custom_message_settings['custom_message_position'] : '';
-                $custom_message_paddding_lm           = array_key_exists ( 'custom_message_paddding_lm', $custom_message_settings ) ? $custom_message_settings['custom_message_paddding_lm'] : '';
-                $custom_message_paddding_tp           = array_key_exists ( 'custom_message_paddding_tp', $custom_message_settings ) ? $custom_message_settings['custom_message_paddding_tp'] : '';
-                $custom_message_border_radius         = array_key_exists ( 'custom_message_border_radius', $custom_message_settings ) ? $custom_message_settings['custom_message_border_radius'] : '';
-                $custom_message_border_top_width      = array_key_exists ( 'custom_message_border_top_width', $custom_message_settings ) ? $custom_message_settings['custom_message_border_top_width'].'px ' : '';
-                $custom_message_border_right_width    = array_key_exists ( 'custom_message_border_right_width', $custom_message_settings ) ? $custom_message_settings['custom_message_border_right_width'].'px ' : '';
-                $custom_message_border_bottom_width   = array_key_exists ( 'custom_message_border_bottom_width', $custom_message_settings ) ? $custom_message_settings['custom_message_border_bottom_width'].'px ' : '';
-                $custom_message_border_left_width     = array_key_exists ( 'custom_message_border_left_width', $custom_message_settings ) ? $custom_message_settings['custom_message_border_left_width'].'px' : '';
-                $custom_message_border_color          = array_key_exists ( 'custom_message_border_color', $custom_message_settings ) ? $custom_message_settings['custom_message_border_color'] : '';
-                $custom_message_background            = array_key_exists ( 'custom_message_background', $custom_message_settings ) ? $custom_message_settings['custom_message_background'] : '';
-                $custom_message_color                 = array_key_exists ( 'custom_message_color', $custom_message_settings ) ? $custom_message_settings['custom_message_color'] : '';
-                
-                $customStyle           .= 'font-size: '.$custom_message_fontsize.'px;padding: '.$custom_message_paddding_tp.'px '.$custom_message_paddding_lm.'px;border-radius: '.$custom_message_border_radius.'px;';
-                $customStyle           .= $custom_message_linheight ? 'line-height: '.$custom_message_linheight.(is_numeric($custom_message_linheight) && $custom_message_linheight > 3 ? 'px' : '').';' : '';
-                $customStyle           .= $custom_message_color ? 'color: '.$custom_message_color.';' : '';
-                $customStyle           .= $custom_message_background ? 'background: '.$custom_message_background.';' : ''; 
-                $customStyle           .= $custom_message_border_color ? 'border-color: '.$custom_message_border_color.';' : ''; 
-                $customStyle           .= $custom_message_position ? 'text-align: '.$custom_message_position.';' : ''; 
-                $customStyle           .= ( $custom_message_border_top_width || $custom_message_border_right_width || $custom_message_border_bottom_width || $custom_message_border_left_width ) ? 'border-width: '.$custom_message_border_top_width.$custom_message_border_right_width.$custom_message_border_bottom_width.$custom_message_border_left_width.';' : ''; 
+                $calc_discount = AWDP_Discount_Application::normalize_discount_amount( $discount['discount'] );
 
-                $message                = $custom_message ? str_replace('[discount]', wc_price($coupons_amount), $custom_message ) : __("You'he saved ", "aco-woo-dynamic-pricing").wc_price($coupons_amount).__(" on this order", "aco-woo-dynamic-pricing");
-                $result                 = '<div class="wdp_save_text" style="'.$customStyle.'">'.nl2br($message).'</div>';
-                echo $result;
+                // Per-unit product discounts are stored per item; multiply by line qty for the order total saved.
+                if ( AWDP_Discount_Application::coupon_amount_is_per_unit( $discount_type, $ruleid ) ) {
+                    $qty           = isset( $discount['quantity'] ) ? (int) $discount['quantity'] : 1;
+                    $calc_discount = $calc_discount * max( 1, $qty );
+                }
 
+                $total += $calc_discount;
             }
         }
 
+        return (float) $total;
+    }
+
+    // Cart Message
+
+    public function wdpCartMessage(){
+
+        if ( ! WC()->cart ) {
+            return;
+        }
+
+        $customStyle = '';
+        $result      = '';
+
+        $checkML      = call_user_func( array( new AWDP_ML(), 'is_default_lan' ), '' );
+        $currentLang  = ! $checkML ? call_user_func( array( new AWDP_ML(), 'current_language' ), '' ) : '';
+        $langSettings = get_option( 'awdp_settings_lang_options' ) ? get_option( 'awdp_settings_lang_options' ) : array();
+
+        // Include line-price discounts (no virtual coupon) and coupon-based discounts.
+        $coupons_amount          = $this->get_cart_saved_amount();
+        $custom_message_settings = get_option( 'awdp_custom_msg_settings' ) ? get_option( 'awdp_custom_msg_settings' ) : array();
+        $custom_message_status   = array_key_exists( 'custom_message_status', $custom_message_settings ) ? $custom_message_settings['custom_message_status'] : false;
+
+        if ( $coupons_amount > 0 && $custom_message_status ) {
+
+            /*
+            * ver @ 4.4.8
+            * WMPL Support custom message
+            */
+            if ( ! empty( $langSettings ) && array_key_exists( $currentLang, $langSettings ) ) {
+                $custom_message = array_key_exists( 'custom_message', $langSettings[ $currentLang ] ) ? $langSettings[ $currentLang ]['custom_message'] : ( array_key_exists( 'custom_message', $custom_message_settings ) ? $custom_message_settings['custom_message'] : '' );
+            } else {
+                $custom_message = array_key_exists( 'custom_message', $custom_message_settings ) ? $custom_message_settings['custom_message'] : '';
+            }
+
+            $custom_message_linheight          = array_key_exists( 'custom_message_linheight', $custom_message_settings ) ? $custom_message_settings['custom_message_linheight'] : '';
+            $custom_message_fontsize           = array_key_exists( 'custom_message_fontsize', $custom_message_settings ) ? $custom_message_settings['custom_message_fontsize'] : '';
+            $custom_message_position           = array_key_exists( 'custom_message_position', $custom_message_settings ) ? $custom_message_settings['custom_message_position'] : '';
+            $custom_message_paddding_lm        = array_key_exists( 'custom_message_paddding_lm', $custom_message_settings ) ? $custom_message_settings['custom_message_paddding_lm'] : '';
+            $custom_message_paddding_tp        = array_key_exists( 'custom_message_paddding_tp', $custom_message_settings ) ? $custom_message_settings['custom_message_paddding_tp'] : '';
+            $custom_message_border_radius      = array_key_exists( 'custom_message_border_radius', $custom_message_settings ) ? $custom_message_settings['custom_message_border_radius'] : '';
+            $custom_message_border_top_width   = array_key_exists( 'custom_message_border_top_width', $custom_message_settings ) ? $custom_message_settings['custom_message_border_top_width'] . 'px ' : '';
+            $custom_message_border_right_width = array_key_exists( 'custom_message_border_right_width', $custom_message_settings ) ? $custom_message_settings['custom_message_border_right_width'] . 'px ' : '';
+            $custom_message_border_bottom_width = array_key_exists( 'custom_message_border_bottom_width', $custom_message_settings ) ? $custom_message_settings['custom_message_border_bottom_width'] . 'px ' : '';
+            $custom_message_border_left_width  = array_key_exists( 'custom_message_border_left_width', $custom_message_settings ) ? $custom_message_settings['custom_message_border_left_width'] . 'px' : '';
+            $custom_message_border_color       = array_key_exists( 'custom_message_border_color', $custom_message_settings ) ? $custom_message_settings['custom_message_border_color'] : '';
+            $custom_message_background         = array_key_exists( 'custom_message_background', $custom_message_settings ) ? $custom_message_settings['custom_message_background'] : '';
+            $custom_message_color              = array_key_exists( 'custom_message_color', $custom_message_settings ) ? $custom_message_settings['custom_message_color'] : '';
+
+            $customStyle .= 'font-size: ' . $custom_message_fontsize . 'px;padding: ' . $custom_message_paddding_tp . 'px ' . $custom_message_paddding_lm . 'px;border-radius: ' . $custom_message_border_radius . 'px;';
+            $customStyle .= $custom_message_linheight ? 'line-height: ' . $custom_message_linheight . ( is_numeric( $custom_message_linheight ) && $custom_message_linheight > 3 ? 'px' : '' ) . ';' : '';
+            $customStyle .= $custom_message_color ? 'color: ' . $custom_message_color . ';' : '';
+            $customStyle .= $custom_message_background ? 'background: ' . $custom_message_background . ';' : '';
+            $customStyle .= $custom_message_border_color ? 'border-color: ' . $custom_message_border_color . ';' : '';
+            $customStyle .= $custom_message_position ? 'text-align: ' . $custom_message_position . ';' : '';
+            $customStyle .= ( $custom_message_border_top_width || $custom_message_border_right_width || $custom_message_border_bottom_width || $custom_message_border_left_width ) ? 'border-width: ' . $custom_message_border_top_width . $custom_message_border_right_width . $custom_message_border_bottom_width . $custom_message_border_left_width . ';' : '';
+
+            $message = $custom_message ? str_replace( '[discount]', wc_price( $coupons_amount ), $custom_message ) : __( "You've saved ", 'aco-woo-dynamic-pricing' ) . wc_price( $coupons_amount ) . __( ' on this order', 'aco-woo-dynamic-pricing' );
+            $result  = '<div class="wdp_save_text" style="' . $customStyle . '">' . nl2br( $message ) . '</div>';
+            echo $result;
+        }
+
+    }
+
+    /**
+     * Whether a product-page quantity falls inside a pricing-table tier.
+     * Open-ended tiers (empty end) match qty >= start. Does not apply a tier
+     * when qty is below start or above a closed end.
+     */
+    protected function quantity_matches_display_tier( $qty, $discount )
+    {
+        if ( ! is_object( $discount ) ) {
+            return false;
+        }
+
+        $start = isset( $discount->start_range ) ? (int) $discount->start_range : 0;
+        if ( $start <= 0 ) {
+            return false;
+        }
+
+        $end_raw = isset( $discount->end_range ) ? $discount->end_range : '';
+        $end     = ( $end_raw === '' || $end_raw === null ) ? 0 : (int) $end_raw;
+
+        if ( $end <= 0 ) {
+            return $qty >= $start;
+        }
+
+        if ( $start === $end ) {
+            return $qty === $start;
+        }
+
+        return $qty >= $start && $qty <= $end;
+    }
+
+    /**
+     * Catalog display price for the product-page "Your Price" box.
+     */
+    protected function resolve_display_unit_price( $posted_price, $product_id, $variation_id )
+    {
+        if ( $variation_id ) {
+            $variation = wc_get_product( $variation_id );
+            if ( $variation && $variation->exists() ) {
+                $parent_id = (int) $variation->get_parent_id();
+                if ( ! $product_id || ! $parent_id || $parent_id === (int) $product_id ) {
+                    $resolved = (float) wc_get_price_to_display( $variation );
+                    if ( $resolved > 0 ) {
+                        return $resolved;
+                    }
+                }
+            }
+        }
+
+        if ( $product_id ) {
+            $product = wc_get_product( $product_id );
+            if ( $product && $product->exists() && ! $product->is_type( 'variable' ) ) {
+                $resolved = (float) wc_get_price_to_display( $product );
+                if ( $resolved > 0 ) {
+                    return $resolved;
+                }
+            }
+        }
+
+        return (float) $posted_price;
     }
 
     // Currency 
@@ -397,6 +456,17 @@ class AWDP_Discount_Display extends AWDP_Discount_Module
                 $table_layout               = $Rule ? get_post_meta($Rule, 'discount_table_layout', true) : '';
                 $var_price                  = $RPrice;
                 $discounted_new_price_bt    = '';
+
+                // Prefer WooCommerce's variation display price over a client-parsed value.
+                if ( ! empty( $_POST['variation_id'] ) ) {
+                    $variation_product = wc_get_product( absint( $_POST['variation_id'] ) );
+                    if ( $variation_product && $variation_product->exists() ) {
+                        $resolved_price = (float) wc_get_price_to_display( $variation_product );
+                        if ( $resolved_price > 0 ) {
+                            $var_price = $resolved_price;
+                        }
+                    }
+                }
 
                 if ( !empty ($langSettings) && array_key_exists ( $currentLang, $langSettings ) ) {
                     $value_display_text         = array_key_exists ( 'tablevaluetext', $langSettings[$currentLang] ) ? $langSettings[$currentLang]['tablevaluetext'] : get_option('awdp_table_value_text');
@@ -498,84 +568,40 @@ class AWDP_Discount_Display extends AWDP_Discount_Module
             }
 
         } else {
-        
-            $variation_prices   = $_POST['ProdVarPrice'] ? json_decode($_POST['ProdVarPrice']) : [];
 
-            if ( $DisData ) {
+            $variation_id = array_key_exists( 'variation_id', $_POST ) ? absint( $_POST['variation_id'] ) : 0;
+            $unit_price   = $this->resolve_display_unit_price( $ProdPrice, $ProdID, $variation_id );
+            $qty          = max( 0, $ProdQty );
+            $decimals     = wc_get_price_decimals();
+            $display_unit = $unit_price;
 
-                // if ( !empty ( $variation_prices ) ) {
+            if ( $DisData && $qty > 0 && $unit_price > 0 ) {
+                $tiers = is_array( $DisData ) ? $DisData : array();
+                usort( $tiers, function ( $a, $b ) {
+                    return (int) $a->start_range - (int) $b->start_range;
+                } );
 
-                //     $price_to_discount_max = $variation_prices ? max($variation_prices) : 0;
-                //     $price_to_discount_min = $variation_prices ? min($variation_prices) : 0;
-
-                //     // Default value when quantity not in range
-                //     $result['price']            = $price_to_discount_min ? $price_to_discount_min : 0;
-                //     $result['total']            = $price_to_discount_min ? round ( ( $price_to_discount_min * $ProdQty ), wc_get_price_decimals() ) : 0;
-                //     $result['currency']         = get_woocommerce_currency_symbol();
-
-                //     foreach ( $DisData as $discount ) { 
-
-                //         if ( ( $discount->end_range != '' && $ProdQty >= $discount->start_range && $ProdQty <= $discount->end_range ) || ( $discount->end_range == '' && $ProdQty >= $discount->start_range ) || ( $discount->end_range != '' && $ProdQty > $discount->end_range && ( $discount->start_range != $discount->end_range ) ) ) {
-
-                //             if ( $discount->dis_type == 'percentage' ) {
-                //                 $discount_max_value     = $price_to_discount_max * ((float)$discount->dis_value / 100);
-                //                 $discount_min_value     = $price_to_discount_min * ((float)$discount->dis_value / 100);
-                //                 // $discount_max_value = min($price_to_discount, $discount_pt);
-                //             } else if ( $discount->dis_type == 'fixed' ) {
-                //                 $discount_max_value     = wc_add_number_precision($discount->dis_value);
-                //                 $discount_min_value     = wc_add_number_precision($discount->dis_value);
-                //             }
-
-                //             $result['price']            = $discounted_new_min_price ? round ( $discounted_new_min_price, wc_get_price_decimals() ) : 0;
-                //             $result['total']            = $discounted_new_min_price ? round ( ( $discounted_new_min_price * $ProdQty ), wc_get_price_decimals() ) : 0;
-                //             $result['currency']         = get_woocommerce_currency_symbol();
-                            
-                //             $discounted_new_max_price   = (($price_to_discount_max - $discount_max_value) > 0) ? wc_price ( wc_remove_number_precision ( $price_to_discount_max - $discount_max_value ) ) : 0;
-                //             $discounted_new_min_price   = (($price_to_discount_min - $discount_min_value) > 0) ? wc_price ( wc_remove_number_precision ( $price_to_discount_min - $discount_min_value ) ) : 0;
-                            
-                //             // $result['price']            = wc_format_sale_price ( wc_price ( wc_remove_number_precision ( $price_to_discount_min ) ) . ' - ' . wc_price ( wc_remove_number_precision ( $price_to_discount_max ) ), $discounted_new_min_price . ' - ' . $discounted_new_max_price );
-
-                //             continue;
-
-                //         }
-
-                //     }
-
-                // } else {
-
-                    // Default value when quantity not in range
-                    $result['price']    = $ProdPrice ? (float)$ProdPrice : 0;
-                    $result['total']    = $ProdPrice ? round ( ( $ProdPrice * $ProdQty ), wc_get_price_decimals() ) : 0;
-                    $result['currency'] = get_woocommerce_currency_symbol();
-
-                    foreach ( $DisData as $discount ) { 
-
-                        if ( ( $discount->end_range != '' && $ProdQty >= $discount->start_range && $ProdQty <= $discount->end_range ) || ( $discount->end_range == '' && $ProdQty >= $discount->start_range ) || ( $discount->end_range != '' && $ProdQty > $discount->end_range && ( $discount->start_range != $discount->end_range ) ) ) {
-
-                            // $discountprice      = ( $discount->dis_type === 'fixed' ) ? ( $ProdPrice - $discount->dis_value ) : ( $ProdPrice - ( $ProdPrice * ( (float)$discount->dis_value / 100 ) ) );
-
-                            // $result['price']    = $discountprice ? round ( $discountprice, wc_get_price_decimals() ) : 0;
-                            // $result['total']    = $discountprice ? round ( ( $discountprice * $ProdQty ), wc_get_price_decimals() ) : 0;
-                            // $result['currency'] = get_woocommerce_currency_symbol();
-
-                            $rounded_discount   = ( $discount->dis_type === 'fixed' ) ? ( $ProdPrice - $discount->dis_value ) : ( $ProdPrice - ( $ProdPrice * ( (float)$discount->dis_value / 100 ) ) );
-                            $discountprice      = $rounded_discount ? round ( $rounded_discount, wc_get_price_decimals() ) : 0;
-
-                            $result['price']    = $discountprice;
-                            $result['total']    = $discountprice ? round ( ( $discountprice * $ProdQty ), wc_get_price_decimals() ) : 0;
-                            $result['currency'] = get_woocommerce_currency_symbol();
-                            continue;
-                            
-                        }
-
+                foreach ( $tiers as $discount ) {
+                    if ( ! $this->quantity_matches_display_tier( $qty, $discount ) ) {
+                        continue;
                     }
 
-                // }
-
+                    if ( isset( $discount->dis_type ) && $discount->dis_type === 'fixed' ) {
+                        $display_unit = max( 0, $unit_price - (float) $discount->dis_value );
+                    } else {
+                        $display_unit = max( 0, $unit_price - ( $unit_price * ( (float) $discount->dis_value / 100 ) ) );
+                    }
+                    break;
+                }
             }
 
-            // $price = wc_format_sale_price($ProdPrice * $converted_rate, $discountprice * $converted_rate);
-            echo !empty ( $result ) ? json_encode($result) : '';
+            $result['price']      = round( (float) $display_unit, $decimals );
+            $result['total']      = round( $result['price'] * $qty, $decimals );
+            $result['price_html'] = wc_price( $result['price'] );
+            $result['total_html'] = wc_price( $result['total'] );
+            $result['currency']   = get_woocommerce_currency_symbol();
+
+            echo ! empty( $result ) ? wp_json_encode( $result ) : '';
 
         }
         die();

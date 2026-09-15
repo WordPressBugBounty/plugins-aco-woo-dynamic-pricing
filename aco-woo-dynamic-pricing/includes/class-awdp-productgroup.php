@@ -46,8 +46,7 @@ class AWDP_productGroup
                     continue;
                 }
 
-                // Check if User if Logged-In
-                if ( ( intval ( $rule['discount_reg_customers'] ) === 1 && !is_user_logged_in() ) || ( intval ( $rule['discount_reg_customers'] ) === 1 && is_user_logged_in() && ( !empty ( array_filter ( $rule['discount_reg_user_roles'] ) ) && empty ( array_intersect ( $rule['discount_cur_user_roles'], $rule['discount_reg_user_roles'] ) ) ) ) ) { 
+                if ( ! awdp_user_qualifies_for_discount_rule( $rule ) ) {
                     continue;
                 }
 
@@ -87,7 +86,6 @@ class AWDP_productGroup
             $discountprice      = '';
             $mindiscountprice   = '';
             $maxdiscountprice   = '';
-            $originalPrice      = '';
             $wdp_max_price      = 0;
             $wdp_min_price      = 0;
             $maxdiscount        = 0;
@@ -96,12 +94,9 @@ class AWDP_productGroup
             $wdp_cart_quantity  = 0;
             $wdp_cart_totals    = 0;
             $ProductRuleActive  = false;
-            
-            // if($product->is_on_sale()){
-            //     $regular_price = $product->get_data()['regular_price'];
-            // }
-
-            $regular_price = $product->is_on_sale() ? $product->get_data()['regular_price'] : $price;
+            $originalPrice      = $product->get_data()['regular_price'];
+            $discountPrice      = null;
+            $has_discount       = false;
 
             foreach ( $rules as $rule ) {
                 
@@ -120,8 +115,7 @@ class AWDP_productGroup
                     continue;
                 }
 
-                // Check if User if Logged-In
-                if ( ( intval ( $rule['discount_reg_customers'] ) === 1 && !is_user_logged_in() ) || ( intval ( $rule['discount_reg_customers'] ) === 1 && is_user_logged_in() && ( !empty ( array_filter ( $rule['discount_reg_user_roles'] ) ) && empty ( array_intersect ( $rule['discount_cur_user_roles'], $rule['discount_reg_user_roles'] ) ) ) ) ) { 
+                if ( ! awdp_user_qualifies_for_discount_rule( $rule ) ) {
                     continue;
                 }
 
@@ -134,6 +128,7 @@ class AWDP_productGroup
                     $discount       = ( $rule['type'] == 'fixed_product_price' ) ? $rule['discount'] : ( ( $price * $rule['discount'] ) / 100 );
 
                     $discountPrice          = ( $discount < $price ) ? $price - $discount : 0;
+                    $has_discount           = true;
 
                 // Single page calculation for Quantity based discount
 
@@ -158,6 +153,7 @@ class AWDP_productGroup
                                 $discount_amt = 0;
                             }
                             $discountPrice    = ( $discount_amt < $price ) ? $price - $discount_amt: 0;
+                            $has_discount     = true;
 
                         } else if (($itemCount >= (int)$quantity_rule['start_range']) && ($itemCount <= (int)$quantity_rule['end_range']) && ((int)$quantity_rule['start_range'] != (int)$quantity_rule['end_range'])) {
                         
@@ -170,7 +166,7 @@ class AWDP_productGroup
                                 $discount_amt = 0;
                             }
                             $discountPrice    = ( $discount_amt < $price ) ? $price - $discount_amt: 0;
-                            $originalPrice    = $regular_price;
+                            $has_discount     = true;
                         } else if (($itemCount >= (int)$quantity_rule['start_range']) && $quantity_rule['end_range'] == '' ) {
                             
                             if ($discount_typ == 'percentage') {
@@ -182,20 +178,23 @@ class AWDP_productGroup
                                 $discount_amt = 0;
                             }
                             $discountPrice    = ( $discount_amt < $price ) ? $price - $discount_amt: 0;
-                            $originalPrice    = $regular_price;
+                            $has_discount     = true;
                         }
                     }
 
-                } else {
-                    $originalPrice      = $regular_price;
                 }
 
             }
 
-            $result          = [];
-            // $result['price'] = isset($discountPrice) ? (float)$discountPrice : (float)$price;
-            $result['price'] = isset($discountPrice) ? round((float)$discountPrice, wc_get_price_decimals()) : round((float)$price, wc_get_price_decimals());
-            $result['originalPrice'] = (float)$originalPrice ? (float)$originalPrice : (float)$price;
+            // No matching rule for this product/qty — leave WCPA formula/lookup price alone.
+            if ( ! $has_discount ) {
+                return '';
+            }
+
+            $result                     = [];
+            $result['price']            = round( (float) $discountPrice, wc_get_price_decimals() );
+            $result['originalPrice']    = (float) $originalPrice ? (float) $originalPrice : (float) $price;
+            $result['hasDiscount']      = true;
             return $result;
         }
         return $result;
@@ -239,8 +238,7 @@ class AWDP_productGroup
                     continue;
                 }
 
-                // Check if User if Logged-In
-                if ( ( intval ( $rule['discount_reg_customers'] ) === 1 && !is_user_logged_in() ) || ( intval ( $rule['discount_reg_customers'] ) === 1 && is_user_logged_in() && ( !empty ( array_filter ( $rule['discount_reg_user_roles'] ) ) && empty ( array_intersect ( $rule['discount_cur_user_roles'], $rule['discount_reg_user_roles'] ) ) ) ) ) { 
+                if ( ! awdp_user_qualifies_for_discount_rule( $rule ) ) {
                     continue;
                 }
 

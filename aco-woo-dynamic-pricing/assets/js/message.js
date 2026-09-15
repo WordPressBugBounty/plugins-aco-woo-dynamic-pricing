@@ -8,7 +8,7 @@ jQuery(document).ready(function() {
         if(e.target.id == 'wdp-survey-form-wrap'){
             wdpClose();
         }
-        if(e.target === openButton){ console.log(1111);
+        if(e.target === openButton){
             e.preventDefault();
             popup.style.display = 'block';
             overlay.style.display = 'block';

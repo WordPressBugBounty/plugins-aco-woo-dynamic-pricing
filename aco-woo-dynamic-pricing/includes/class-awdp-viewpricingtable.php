@@ -41,8 +41,7 @@ class AWDP_viewPricingTable {
                 continue;
             }
 
-            // Check if User if Logged-In
-            if ( ( intval ( $rule['discount_reg_customers'] ) === 1 && !is_user_logged_in() ) || ( intval ( $rule['discount_reg_customers'] ) === 1 && is_user_logged_in() && ( !empty ( array_filter ( $rule['discount_reg_user_roles'] ) ) && empty ( array_intersect ( $rule['discount_cur_user_roles'], $rule['discount_reg_user_roles'] ) ) ) ) ) { 
+            if ( ! awdp_user_qualifies_for_discount_rule( $rule ) ) {
                 continue;
             }
 
@@ -169,23 +168,40 @@ class AWDP_viewPricingTable {
                 array_multisort ( array_column ( $quantity_rules, "start_range" ), SORT_ASC, $quantity_rules );
             }
 
-            // Variable Product
+            // Variable Product — collect display prices (never treat variation IDs as prices).
             $variation_prices = [];
             if ( $item->is_type('variable') ) {
                 if ( $discountProductMaxPrice && $discountProductMinPrice )  {
-                    array_push( $variation_prices, wc_add_number_precision ( $discountProductMaxPrice ) );
-                    array_push( $variation_prices, wc_add_number_precision ( $discountProductMinPrice ) );
+                    array_push( $variation_prices, wc_add_number_precision ( (float) $discountProductMaxPrice ) );
+                    array_push( $variation_prices, wc_add_number_precision ( (float) $discountProductMinPrice ) );
                 } else {
-                    if ( array_key_exists ( $prod_ID, $variations ) ) {
-                        $variation_ids = $variations[$prod_ID];
-                        foreach ( $variation_ids as $variation_id ) {
-                            array_push( $variation_prices, wc_add_number_precision ( $variation_id ) );
+                    $available_variations = $item->get_available_variations();
+                    if ( ! empty( $available_variations ) ) {
+                        foreach ( $available_variations as $variation ) {
+                            if ( isset( $variation['display_price'] ) && $variation['display_price'] !== '' ) {
+                                array_push( $variation_prices, wc_add_number_precision( (float) $variation['display_price'] ) );
+                            }
                         }
-                    } else {
-                        $variations = $item->get_available_variations();
-                        foreach ( $variations as $variation ) {
-                            array_push ( $variation_prices, wc_add_number_precision ( $variation['display_price'] ) );
+                    }
+
+                    if ( empty( $variation_prices ) ) {
+                        foreach ( $item->get_children() as $child_id ) {
+                            $child = wc_get_product( $child_id );
+                            if ( ! $child || $child->get_price() === '' ) {
+                                continue;
+                            }
+                            $child_price = ( 'incl' === get_option( 'woocommerce_tax_display_shop' ) )
+                                ? wc_get_price_including_tax( $child )
+                                : wc_get_price_excluding_tax( $child );
+                            if ( $child_price !== '' && (float) $child_price > 0 ) {
+                                $variation_prices[] = wc_add_number_precision( (float) $child_price );
+                            }
                         }
+                    }
+
+                    // Last resort: parent/min price already resolved for the table.
+                    if ( empty( $variation_prices ) && $price > 0 ) {
+                        $variation_prices[] = wc_add_number_precision( (float) $price );
                     }
                 }
             }

@@ -5,9 +5,9 @@ Contributors: acowebs
 Donate link:
 Tags: WooCommerce Dynamic Pricing, WooCommerce Discount rules, WooCommerce Bulk Discounts, WooCommerce Pricing Deals
 Requires at least: 4.4
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 5.0.0
+Stable tag: 5.1.0
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -163,17 +163,19 @@ Installing "Woocommerce dynamic pricing" can be done either by searching for "Ac
 
 == Screenshots ==
 
-1. Pricing Rules
-2. Discount Settings
-3. Quantity Based Discounts
-4. Scheduling Discounts
-5. Rules and Restrictions
-6. Product Lists
-7. Product List - Product Selection
-8. Product List - Dynamic Selection
-9. Offer Description Settings
-10. Offer Description Frontend View
-11. Realtime Pricing
+1. Manage pricing rules from one list, including type, value, priority, schedule, and status.
+2. Create a percentage discount on product prices for all products or a selected product list.
+3. Set quantity-based bulk discounts and display a pricing table on the product page.
+4. Schedule discounts for one or more date and time ranges.
+5. Create product lists to target discounts at selected products or categories.
+6. Build a dynamic product list from categories, with optional product exclusions.
+7. Add specific products to a list for use in pricing rules.
+8. Apply a cart-total discount when the order meets a spending condition.
+9. Set different discount values based on product price ranges.
+10. Configure the discount label, coupon interaction, and cart discount notices.
+11. Show discounted prices, offer text, and a quantity discount table on the product page.
+12. Display discounted line prices and a savings message in the cart.
+13. Show discounted prices and totals on the checkout page.
 
 == Frequently Asked Questions ==
 = Is it possible to set multiple discounts? =
@@ -225,6 +227,11 @@ Yes, you can change the border color to match your theme style. We have also pro
 You will be able to use plugin in your site, but however, you won't be able to receive any further updates and priority support.
 
 == Changelog ==
+= 5.1.0 =
+* Coupon interaction settings for Dynamic Pricing and WooCommerce coupons
+* Rule listing search, pagination, and drag-and-drop sorting
+* Cart, checkout, and product-page pricing display fixes
+* Improved compatibility with WCPA
 = 5.0.0 =
 * Major release with a fully redesigned admin interface
 * Improved discount calculation reliability and performance
@@ -577,5 +584,7 @@ You will be able to use plugin in your site, but however, you won't be able to r
 * Woocomerce discount plugin
 
 == Upgrade Notice ==
+= 5.1.0 =
+Includes coupon interaction options, listing improvements, and pricing display fixes.
 = 5.0.0 =
 This is a major update with a redesigned admin interface and a refactored discount engine. Please back up your site before updating.

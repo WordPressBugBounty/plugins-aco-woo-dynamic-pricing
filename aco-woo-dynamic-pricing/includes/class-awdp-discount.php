@@ -184,6 +184,16 @@ class AWDP_Discount
         return $this->cart->cart_discount_items($item_price, $cart_item);
     }
 
+    public function get_cart_item_calculated_unit_price($cart_item)
+    {
+        return $this->cart->get_cart_item_calculated_unit_price($cart_item);
+    }
+
+    public function align_store_api_cart_item_prices($item)
+    {
+        return $this->cart->align_store_api_cart_item_prices($item);
+    }
+
     public function wdpCartLoop($wc, $cart_item, $cart_item_key)
     {
         return $this->cart->wdpCartLoop($wc, $cart_item, $cart_item_key);
@@ -287,6 +297,11 @@ class AWDP_Discount
     public function applyFakeCoupons()
     {
         return $this->coupon->applyFakeCoupons();
+    }
+
+    public function remove_regular_coupons_if_blocked()
+    {
+        return $this->coupon->remove_regular_coupons_if_blocked();
     }
 
     public function wdpMiniCart()

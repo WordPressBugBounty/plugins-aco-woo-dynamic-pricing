@@ -55,6 +55,7 @@ class AWDP_Front_End
      */
     private $show_price = false;
     private $cart_message_rendered = false;
+    private $discount_notice_shown = false;
 
     function __construct($discount, $file = '', $version = '1.0.0') {
 
@@ -80,9 +81,13 @@ class AWDP_Front_End
             // Cart Item Price
             add_filter( 'woocommerce_cart_item_price', array($this, 'cart_price_view'), 1000, 2 );
             add_filter( 'woocommerce_cart_item_price_html', array($this, 'cart_price_view'), 1000, 2 );
+            add_filter( 'woocommerce_widget_cart_item_quantity', array( $this, 'widget_cart_item_quantity' ), 1000, 3 );
+            add_filter( 'rest_post_dispatch', array( $this, 'align_store_api_cart_item_unit_prices' ), 20, 3 );
+            // Block cart/checkout SSR hydrates Store API without rest_post_dispatch.
+            add_filter( 'woocommerce_hydration_request_after_callbacks', array( $this, 'align_store_api_cart_item_unit_prices' ), 20, 3 );
 
-            // Cart 
-            add_action( 'woocommerce_cart_item_subtotal', array( $this, 'wdpCartLoop' ), 8, 3 );
+            // Cart subtotal (priority 1000: after WCPA so split display HTML is authoritative)
+            add_filter( 'woocommerce_cart_item_subtotal', array( $this, 'wdpCartLoop' ), 1000, 3 );
 
             // Coupon Management
             /*
@@ -98,13 +103,23 @@ class AWDP_Front_End
                 
                 add_filter( 'woocommerce_coupon_message', array($this, 'coupon_message'), 15, 3 );
                 add_filter( 'woocommerce_coupon_error', array($this, 'coupon_message'), 15, 3 );
+
+                // Coupon interaction: block or strip regular coupons when mode requires it.
+                add_filter( 'woocommerce_coupon_is_valid', array( $this, 'validate_regular_coupon_interaction' ), 10, 2 );
+                add_action( 'woocommerce_before_calculate_totals', array( $this, 'remove_regular_coupons_if_blocked' ), 5, 1 );
             // }
             
             // Clear Show discount applied message on cart page
             add_action( 'woocommerce_checkout_update_order_meta', array($this, 'wdpfirstOrderMsg'));
-            add_action( 'woocommerce_after_calculate_totals', array( $this, 'show_cart_discount_notice_rest' ), 1000, 1 );
-            add_filter( 'the_content', array( $this, 'show_cart_discount_notice_via_content' ) );
+            // Classic cart: add notice before notices are printed (after ensuring totals/discounts exist).
+            add_action( 'woocommerce_before_cart', array( $this, 'ensure_cart_discount_notice' ), 5 );
+            // Blocks Store API + any calculate_totals on cart context.
+            add_action( 'woocommerce_after_calculate_totals', array( $this, 'show_cart_discount_notice' ), 1000, 1 );
+            // Elementor / content fallbacks (after shortcodes so discounts are calculated).
+            add_filter( 'the_content', array( $this, 'show_cart_discount_notice_via_content' ), 20 );
             add_filter( 'the_content', array( $this, 'append_saved_text_to_content' ), 100 );
+            // Block cart markup fallback for You've Saved Text.
+            add_filter( 'render_block', array( $this, 'append_saved_text_to_cart_block' ), 20, 2 );
 
             // Pricing table
             if( false === get_option('awdp_table_position') ){
@@ -214,8 +229,9 @@ class AWDP_Front_End
             add_action( 'wp_ajax_wcpaQunantity_Discount', array( $this, 'wcpaQunantity_Discount') );
             add_action( 'wp_ajax_nopriv_wcpaQunantity_Discount', array( $this, 'wcpaQunantity_Discount') );
 
-            // Cart Message
+            // Cart Message (classic cart + collaterals fallback)
             add_action( 'woocommerce_after_cart_table', array( $this, 'wdpCartMessage') );
+            add_action( 'woocommerce_before_cart_collaterals', array( $this, 'wdpCartMessage'), 5 );
 
             // WCPA 5.0.0
             add_filter ( 'wcpa_discount_rule', array( $this, 'wcpaDiscount' ), 10, 2);
@@ -229,26 +245,216 @@ class AWDP_Front_End
 
     public function wdpCartMessage()
     {
+        if ( $this->cart_message_rendered ) {
+            return;
+        }
 
-        $this->cart_message_rendered = true;
-        echo $this->discount->wdpCartMessage();
+        $this->ensure_cart_discounts_ready();
 
+        ob_start();
+        $this->discount->wdpCartMessage();
+        $saved_text = ob_get_clean();
+
+        if ( $saved_text ) {
+            $this->cart_message_rendered = true;
+            echo $saved_text;
+        }
     }
 
     /**
-     * Append You've Saved Text on block-based cart pages
+     * Append You've Saved Text on block-based / Elementor cart pages via page content.
      */
     public function append_saved_text_to_content( $content ) {
-        if ( !is_admin() && is_cart() && !$this->cart_message_rendered ) {
-            ob_start();
-            $this->discount->wdpCartMessage();
-            $saved_text = ob_get_clean();
-            
-            if ( $saved_text ) {
-                $content .= $saved_text;
-            }
+        if ( is_admin() || ! is_cart() || $this->cart_message_rendered ) {
+            return $content;
         }
+
+        $this->ensure_cart_discounts_ready();
+
+        ob_start();
+        $this->discount->wdpCartMessage();
+        $saved_text = ob_get_clean();
+
+        if ( $saved_text ) {
+            $this->cart_message_rendered = true;
+            $content .= $saved_text;
+        }
+
         return $content;
+    }
+
+    /**
+     * Append You've Saved Text after the WooCommerce Cart block.
+     *
+     * @param string $block_content Block HTML.
+     * @param array  $block         Parsed block.
+     * @return string
+     */
+    public function append_saved_text_to_cart_block( $block_content, $block ) {
+        if ( $this->cart_message_rendered || empty( $block['blockName'] ) ) {
+            return $block_content;
+        }
+
+        if ( 'woocommerce/cart' !== $block['blockName'] && 'woocommerce/filled-cart-block' !== $block['blockName'] ) {
+            return $block_content;
+        }
+
+        // Prefer the outer cart block once; skip nested filled-cart if outer already handled.
+        if ( 'woocommerce/filled-cart-block' === $block['blockName'] && false !== strpos( $block_content, 'wdp_save_text' ) ) {
+            return $block_content;
+        }
+
+        $this->ensure_cart_discounts_ready();
+
+        ob_start();
+        $this->discount->wdpCartMessage();
+        $saved_text = ob_get_clean();
+
+        if ( $saved_text ) {
+            $this->cart_message_rendered = true;
+            $block_content .= $saved_text;
+        }
+
+        return $block_content;
+    }
+
+    /**
+     * Ensure cart totals (and therefore AWDP discounts) have been calculated for this request.
+     */
+    private function ensure_cart_discounts_ready() {
+        if ( ! WC()->cart ) {
+            return;
+        }
+
+        if ( empty( $this->discount->discounts ) ) {
+            WC()->cart->calculate_totals();
+        }
+    }
+
+    /**
+     * Build the discount-applied notice string.
+     *
+     * @return string
+     */
+    private function get_cart_discount_notice_text() {
+        $label = get_option( 'awdp_fee_label' ) ? get_option( 'awdp_fee_label' ) : 'Discount';
+
+        if ( get_option( 'awdp_discount_message' ) ) {
+            return str_replace( '[label]', $label, get_option( 'awdp_discount_message' ) );
+        }
+
+        if ( 'discount' == mb_strtolower( $label, 'UTF-8' ) ) {
+            return $label . __( ' has been applied!', 'aco-woo-dynamic-pricing' );
+        }
+
+        return __( "Discount '", 'aco-woo-dynamic-pricing' ) . $label . __( "' has been applied!", 'aco-woo-dynamic-pricing' );
+    }
+
+    /**
+     * Whether the discount-applied notice should display (respects once-per-session setting).
+     *
+     * @return bool
+     */
+    private function should_show_cart_discount_notice() {
+        if ( $this->discount_notice_shown ) {
+            return false;
+        }
+
+        if ( get_option( 'awdp_message_status' ) != 1 ) {
+            return false;
+        }
+
+        if ( empty( $this->discount->discounts ) ) {
+            return false;
+        }
+
+        $message_once = ( get_option( 'awdp_message_once' ) !== false ) ? get_option( 'awdp_message_once' ) : 1;
+
+        if ( $message_once == 1 && WC()->session && WC()->session->get( 'AWDP_CART_NOTICE' ) ) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Register the WC notice and mark session when configured to show once.
+     *
+     * @param string $notice Notice text.
+     */
+    private function register_cart_discount_notice( $notice ) {
+        if ( $this->discount_notice_shown ) {
+            return;
+        }
+
+        $this->collapse_duplicate_discount_notices( $notice );
+
+        // "success" maps cleanly to classic + Blocks snackbar notices.
+        if ( false === wc_has_notice( $notice, 'success' ) && false === wc_has_notice( $notice, 'notice' ) ) {
+            wc_add_notice( $notice, 'success' );
+        }
+
+        $message_once = ( get_option( 'awdp_message_once' ) !== false ) ? get_option( 'awdp_message_once' ) : 1;
+        if ( $message_once == 1 && WC()->session ) {
+            WC()->session->set( 'AWDP_CART_NOTICE', true );
+        }
+
+        $this->discount_notice_shown = true;
+    }
+
+    /**
+     * Keep a single copy of the discount-applied notice in the WC notice queue.
+     *
+     * Store API add-to-cart requests previously queued the same notice once per item.
+     *
+     * @param string $notice Notice text.
+     */
+    private function collapse_duplicate_discount_notices( $notice ) {
+        if ( $notice === '' || ! function_exists( 'wc_get_notices' ) || ! function_exists( 'wc_set_notices' ) ) {
+            return;
+        }
+
+        $all = wc_get_notices();
+        if ( empty( $all ) || ! is_array( $all ) ) {
+            return;
+        }
+
+        $needle  = wp_strip_all_tags( $notice );
+        $changed = false;
+        $found   = false;
+
+        foreach ( $all as $type => $entries ) {
+            if ( ! is_array( $entries ) ) {
+                continue;
+            }
+
+            $kept = array();
+
+            foreach ( $entries as $entry ) {
+                $text = '';
+                if ( is_array( $entry ) && isset( $entry['notice'] ) ) {
+                    $text = wp_strip_all_tags( (string) $entry['notice'] );
+                } elseif ( is_string( $entry ) ) {
+                    $text = wp_strip_all_tags( $entry );
+                }
+
+                if ( $text === $needle ) {
+                    if ( $found ) {
+                        $changed = true;
+                        continue;
+                    }
+                    $found = true;
+                }
+
+                $kept[] = $entry;
+            }
+
+            $all[ $type ] = $kept;
+        }
+
+        if ( $changed ) {
+            wc_set_notices( $all );
+        }
     }
 
     /**
@@ -299,113 +505,191 @@ class AWDP_Front_End
 
 
     /**
-     * Helper to detect classic cart page or WooCommerce Blocks Store API cart request.
+     * Classic cart page, or Store API cart *view* (GET /wc/store/v1/cart).
+     *
+     * Mutations such as add-item must not queue cart notices: each shop add-to-cart
+     * is a new REST request and would otherwise repeat the same message per product.
      */
     private function is_cart_context() {
         if ( is_cart() ) {
             return true;
         }
 
-        if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
-            if ( isset( $_SERVER['REQUEST_URI'] ) ) {
-                $uri = $_SERVER['REQUEST_URI'];
-                if ( strpos( $uri, '/wc/store' ) !== false && strpos( $uri, '/checkout' ) === false ) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        return $this->is_store_api_cart_view_request();
     }
 
     /**
-     * Show discount notice via REST API (for WooCommerce Blocks Cart)
+     * True for GET Store API cart reads only (not add-item, update-item, batch, checkout).
+     *
+     * @return bool
      */
-    public function show_cart_discount_notice_rest($cart) {
-        if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
-            $is_cart = $this->is_cart_context();
-            
-
-
-            if ( $is_cart && get_option( 'awdp_message_status' ) == 1 ) {
-                if ( !empty( $this->discount->discounts ) ) {
-                    $message_once = ( get_option( 'awdp_message_once' ) !== false ) ? get_option( 'awdp_message_once' ) : 1;
-
-                    $label = get_option('awdp_fee_label') ? get_option('awdp_fee_label') : 'Discount';
-                    $notice = get_option('awdp_discount_message') 
-                        ? str_replace('[label]', $label, get_option('awdp_discount_message')) 
-                        : (('discount' == mb_strtolower($label, 'UTF-8')) 
-                            ? $label . __(" has been applied!", "aco-woo-dynamic-pricing") 
-                            : __("Discount '", "aco-woo-dynamic-pricing") . $label . __("' has been applied!", "aco-woo-dynamic-pricing"));
-
-                    if ( $message_once == 1 ) {
-                        if ( !WC()->session->get( 'AWDP_CART_NOTICE' ) ) {
-                            if ( false === wc_has_notice( $notice, 'notice' ) ) {
-                                wc_add_notice( $notice, 'notice' );
-                            }
-                            WC()->session->set( 'AWDP_CART_NOTICE', true );
-                        }
-                    } else {
-                        if ( false === wc_has_notice( $notice, 'notice' ) ) {
-                            wc_add_notice( $notice, 'notice' );
-                        }
-                    }
-                } else {
-                    WC()->session->set( 'AWDP_CART_NOTICE', null );
-                }
-            }
+    private function is_store_api_cart_view_request() {
+        if ( ! ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+            return false;
         }
+
+        $method = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : '';
+        if ( 'GET' !== $method ) {
+            return false;
+        }
+
+        $route = $this->get_store_api_request_route();
+        if ( $route === '' ) {
+            return false;
+        }
+
+        if ( false === strpos( $route, '/wc/store' ) || false !== strpos( $route, '/checkout' ) ) {
+            return false;
+        }
+
+        $path = untrailingslashit( (string) wp_parse_url( $route, PHP_URL_PATH ) );
+        if ( $path === '' ) {
+            $path = untrailingslashit( $route );
+        }
+        if ( $path !== '' && isset( $path[0] ) && $path[0] !== '/' ) {
+            $path = '/' . $path;
+        }
+
+        return (bool) preg_match( '#/wc/store(?:/v[0-9]+)?/cart$#', $path );
     }
 
     /**
-     * Show discount notice via direct HTML output prepended to the page content (for Classic, Elementor, and Blocks Cart)
+     * Store API path from pretty permalinks or rest_route query (plain permalinks).
+     *
+     * @return string
      */
-    public function show_cart_discount_notice_via_content( $content ) {
-        if ( !is_admin() && is_cart() && get_option( 'awdp_message_status' ) == 1 ) {
-            
+    private function get_store_api_request_route() {
+        if ( isset( $GLOBALS['wp']->query_vars['rest_route'] ) && $GLOBALS['wp']->query_vars['rest_route'] ) {
+            return (string) $GLOBALS['wp']->query_vars['rest_route'];
+        }
 
+        if ( isset( $_REQUEST['rest_route'] ) ) {
+            return (string) wp_unslash( $_REQUEST['rest_route'] );
+        }
 
-            if ( !empty( $this->discount->discounts ) ) {
-                $message_once = ( get_option( 'awdp_message_once' ) !== false ) ? get_option( 'awdp_message_once' ) : 1;
+        if ( empty( $_SERVER['REQUEST_URI'] ) ) {
+            return '';
+        }
 
-                $label = get_option('awdp_fee_label') ? get_option('awdp_fee_label') : 'Discount';
-                $notice = get_option('awdp_discount_message') 
-                    ? str_replace('[label]', $label, get_option('awdp_discount_message')) 
-                    : (('discount' == mb_strtolower($label, 'UTF-8')) 
-                        ? $label . __(" has been applied!", "aco-woo-dynamic-pricing") 
-                        : __("Discount '", "aco-woo-dynamic-pricing") . $label . __("' has been applied!", "aco-woo-dynamic-pricing"));
+        return (string) wp_unslash( $_SERVER['REQUEST_URI'] );
+    }
 
-                $show_notice = false;
-                if ( $message_once == 1 ) {
-                    if ( !WC()->session->get( 'AWDP_CART_NOTICE' ) ) {
-                        $show_notice = true;
-                    }
-                } else {
-                    $show_notice = true;
-                }
+    /**
+     * Classic cart: ensure discounts exist, then register the discount-applied notice
+     * before WooCommerce prints notices.
+     */
+    public function ensure_cart_discount_notice() {
+        if ( get_option( 'awdp_message_status' ) != 1 ) {
+            return;
+        }
 
-                static $notice_prepended = false; // Prevent multiple prepends in same request
+        $this->ensure_cart_discounts_ready();
+        $this->collapse_duplicate_discount_notices( $this->get_cart_discount_notice_text() );
 
-                if ( $show_notice && !$notice_prepended ) {
-                    // Standard WooCommerce notice HTML structure
-                    $notice_html = '<div class="woocommerce-notices-wrapper">';
-                    $notice_html .= '<div class="woocommerce-message" role="alert">';
-                    $notice_html .= esc_html( $notice );
-                    $notice_html .= '</div>';
-                    $notice_html .= '</div>';
-                    
-                    $content = $notice_html . $content;
-                    $notice_prepended = true;
-
-                    if ( $message_once == 1 ) {
-                        WC()->session->set( 'AWDP_CART_NOTICE', true );
-                    }
-                }
-            } else {
+        if ( ! $this->should_show_cart_discount_notice() ) {
+            if ( empty( $this->discount->discounts ) && WC()->session ) {
                 WC()->session->set( 'AWDP_CART_NOTICE', null );
             }
+            return;
         }
-        return $content;
+
+        $this->register_cart_discount_notice( $this->get_cart_discount_notice_text() );
+    }
+
+    /**
+     * Show discount notice after totals for Blocks Store API requests.
+     * Classic cart uses ensure_cart_discount_notice(); builders use the_content prepend.
+     *
+     * @param WC_Cart $cart Cart object.
+     */
+    public function show_cart_discount_notice( $cart ) {
+        if ( ! ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || ! $this->is_cart_context() ) {
+            return;
+        }
+
+        if ( get_option( 'awdp_message_status' ) != 1 ) {
+            return;
+        }
+
+        if ( empty( $this->discount->discounts ) ) {
+            if ( WC()->session ) {
+                WC()->session->set( 'AWDP_CART_NOTICE', null );
+            }
+            return;
+        }
+
+        $this->collapse_duplicate_discount_notices( $this->get_cart_discount_notice_text() );
+
+        if ( ! $this->should_show_cart_discount_notice() ) {
+            return;
+        }
+
+        $this->register_cart_discount_notice( $this->get_cart_discount_notice_text() );
+    }
+
+    /**
+     * Show discount notice via HTML prepended to page content (Elementor / themes without notice hooks).
+     *
+     * @param string $content Post content.
+     * @return string
+     */
+    public function show_cart_discount_notice_via_content( $content ) {
+        if ( is_admin() || ! is_cart() || get_option( 'awdp_message_status' ) != 1 ) {
+            return $content;
+        }
+
+        static $notice_prepended = false;
+        if ( $notice_prepended ) {
+            return $content;
+        }
+
+        $this->ensure_cart_discounts_ready();
+
+        if ( empty( $this->discount->discounts ) ) {
+            if ( WC()->session ) {
+                WC()->session->set( 'AWDP_CART_NOTICE', null );
+            }
+            return $content;
+        }
+
+        $notice = $this->get_cart_discount_notice_text();
+        $this->collapse_duplicate_discount_notices( $notice );
+
+        // Block cart: Store API snackbar handles the notice (avoid duplicate page HTML).
+        if ( function_exists( 'has_block' ) && has_block( 'woocommerce/cart' ) ) {
+            return $content;
+        }
+
+        // Classic cart already printed the notice via woocommerce_before_cart.
+        if ( $this->discount_notice_shown ) {
+            return $content;
+        }
+
+        if ( ! $this->should_show_cart_discount_notice() ) {
+            return $content;
+        }
+
+        // If WC already has the notice queued (and will print it), skip HTML prepend.
+        if ( wc_has_notice( $notice, 'success' ) || wc_has_notice( $notice, 'notice' ) ) {
+            $this->discount_notice_shown = true;
+            return $content;
+        }
+
+        $notice_html  = '<div class="woocommerce-notices-wrapper">';
+        $notice_html .= '<div class="woocommerce-message" role="alert">';
+        $notice_html .= esc_html( $notice );
+        $notice_html .= '</div>';
+        $notice_html .= '</div>';
+
+        $message_once = ( get_option( 'awdp_message_once' ) !== false ) ? get_option( 'awdp_message_once' ) : 1;
+        if ( $message_once == 1 && WC()->session ) {
+            WC()->session->set( 'AWDP_CART_NOTICE', true );
+        }
+
+        $this->discount_notice_shown = true;
+        $notice_prepended            = true;
+
+        return $notice_html . $content;
     }
 
     /**
@@ -444,7 +728,10 @@ class AWDP_Front_End
         */
         $new_config         = get_option('awdp_new_config') ? get_option('awdp_new_config') : []; 
 
-        wp_register_script('awd-script', AWDP_FOLDER_PATH . 'assets/js/frontend.js', array('jquery'), $this->_version);
+        $frontend_js = plugin_dir_path( AWDP_FILE ) . 'assets/js/frontend.js';
+        $frontend_ver = file_exists( $frontend_js ) ? (string) filemtime( $frontend_js ) : $this->_version;
+
+        wp_register_script('awd-script', AWDP_FOLDER_PATH . 'assets/js/frontend.js', array('jquery'), $frontend_ver);
         wp_localize_script('awd-script', 'awdajaxobject', 
             array( 
                 'url'               => admin_url('admin-ajax.php'), 
@@ -453,7 +740,9 @@ class AWDP_Front_End
                 'dynamicPricing'    => array_key_exists ( 'dynamicpricing', $new_config ) ? $new_config['dynamicpricing'] : '',
                 'variablePricing'   => array_key_exists ( 'variablepricing', $new_config ) ? $new_config['variablepricing'] : '',
                 'thousandSeparator' => get_option('woocommerce_price_thousand_sep'),
-                'decimalSeparator'  => get_option('woocommerce_price_decimal_sep')
+                'decimalSeparator'  => get_option('woocommerce_price_decimal_sep'),
+                'priceDecimals'     => wc_get_price_decimals(),
+                'currencySymbol'    => get_woocommerce_currency_symbol()
             )
         );
 
@@ -485,11 +774,24 @@ class AWDP_Front_End
      */
     public function restore_cart_item_from_session($cart_item, $values, $cart_key)
     {
+        if ( isset( $values['awdp_wcpa_split'] ) ) {
+            $cart_item['awdp_wcpa_split'] = (bool) $values['awdp_wcpa_split'];
+        }
+        if ( isset( $values['awdp_wcpa_addon_unit'] ) ) {
+            $cart_item['awdp_wcpa_addon_unit'] = (float) $values['awdp_wcpa_addon_unit'];
+        }
+
         if (!isset($values['awdp_price_before_discount'])) {
             return $cart_item;
         }
 
         $cached_base = (float) $values['awdp_price_before_discount'];
+
+        // WCPA split/baked-in bases are not plain catalog prices — keep the session value.
+        if ( $cached_base > 0 && ( ! empty( $values['awdp_wcpa_split'] ) || isset( $values['awdp_wcpa_addon_unit'] ) ) ) {
+            $cart_item['awdp_price_before_discount'] = $cached_base;
+            return $cart_item;
+        }
 
         // Resolve the correct product ID (variation takes priority).
         $product_id  = !empty($cart_item['variation_id']) ? (int) $cart_item['variation_id'] : (int) $cart_item['product_id'];
@@ -636,6 +938,42 @@ class AWDP_Front_End
     }
 
     /**
+     * Reject WooCommerce coupons when interaction mode is Dynamic Pricing only.
+     *
+     * @param bool      $valid  Whether the coupon is valid.
+     * @param WC_Coupon $coupon Coupon object.
+     * @return bool
+     */
+    public function validate_regular_coupon_interaction( $valid, $coupon ) {
+
+        if ( ! $valid || ! $coupon ) {
+            return $valid;
+        }
+
+        if ( awdp_should_block_regular_coupons() && ! awdp_is_virtual_coupon_code( $coupon->get_code() ) ) {
+            throw new \Exception(
+                __( 'Sorry, this coupon cannot be applied. A promotional discount is already active on your cart, and coupon codes cannot be used at the same time.', 'aco-woo-dynamic-pricing' )
+            );
+        }
+
+        return $valid;
+
+    }
+
+    /**
+     * Strip already-applied store coupons in Dynamic Pricing only mode.
+     *
+     * @param WC_Cart $cart Cart object.
+     */
+    public function remove_regular_coupons_if_blocked( $cart = null ) {
+
+        if ( method_exists( $this->discount, 'remove_regular_coupons_if_blocked' ) ) {
+            $this->discount->remove_regular_coupons_if_blocked();
+        }
+
+    }
+
+    /**
      * Show quantity discount on cart items
      * @param $cart_obj object
     **/
@@ -669,6 +1007,85 @@ class AWDP_Front_End
 
         return $this->discount->cart_discount_items( $item_price, $cart_item );
 
+    }
+
+    /**
+     * Mini-cart "qty × price" uses the calculated line unit only (no strike-through).
+     *
+     * Classic mini-cart reuses woocommerce_cart_item_price, which may include a
+     * struck original for the main cart. Replace it with the applicable price.
+     *
+     * @param string $html          Default quantity HTML.
+     * @param array  $cart_item     Cart line.
+     * @param string $cart_item_key Cart item key.
+     * @return string
+     */
+    public function widget_cart_item_quantity( $html, $cart_item, $cart_item_key ) {
+        if ( empty( $cart_item['awdp_price_before_discount'] ) ) {
+            return $html;
+        }
+
+        $unit = $this->discount->get_cart_item_calculated_unit_price( $cart_item );
+        if ( $unit === null ) {
+            return $html;
+        }
+
+        $original = (float) $cart_item['awdp_price_before_discount'];
+        if ( $original <= $unit + 0.0001 ) {
+            return $html;
+        }
+
+        $addon_unit = function_exists( 'awdp_get_wcpa_display_addon_unit' )
+            ? awdp_get_wcpa_display_addon_unit( $cart_item )
+            : 0;
+        $qty        = isset( $cart_item['quantity'] ) ? $cart_item['quantity'] : 1;
+        $price_html = wc_price( $unit + (float) $addon_unit );
+
+        return '<span class="quantity">' . sprintf( '%s &times; %s', $qty, $price_html ) . '</span>';
+    }
+
+    /**
+     * Store API / block cart, checkout, and mini-cart: align displayed item prices.
+     *
+     * Also hooked on woocommerce_hydration_request_after_callbacks because block
+     * cart/checkout SSR does not run rest_post_dispatch.
+     *
+     * @param mixed            $response Response object.
+     * @param mixed            $handler  Route handler.
+     * @param WP_REST_Request  $request  Request object.
+     * @return mixed
+     */
+    public function align_store_api_cart_item_unit_prices( $response, $handler, $request ) {
+        if ( is_wp_error( $response ) || ! $request instanceof WP_REST_Request ) {
+            return $response;
+        }
+
+        if ( ! is_object( $response ) || ! method_exists( $response, 'get_data' ) || ! method_exists( $response, 'set_data' ) ) {
+            return $response;
+        }
+
+        $route = (string) $request->get_route();
+        if ( false === strpos( $route, '/wc/store' ) ) {
+            return $response;
+        }
+
+        $data = $response->get_data();
+        if ( empty( $data['items'] ) || ! is_array( $data['items'] ) ) {
+            return $response;
+        }
+
+        foreach ( $data['items'] as $index => $item ) {
+            if ( is_object( $item ) ) {
+                $item = json_decode( wp_json_encode( $item ), true );
+            }
+            if ( is_array( $item ) ) {
+                $data['items'][ $index ] = $this->discount->align_store_api_cart_item_prices( $item );
+            }
+        }
+
+        $response->set_data( $data );
+
+        return $response;
     }
 
     // Price HTML Display
@@ -721,15 +1138,15 @@ class AWDP_Front_End
     // Inline Styles
     public function awdp_styles() {
 
-        // Hide Coupon Box
-        $hideCouponBox = get_option('awdp_hide_coupon_box') ? get_option('awdp_hide_coupon_box') : false;
+        // Hide Coupon Box (Dynamic Pricing only mode, or legacy flag).
+        $hideCouponBox = awdp_should_hide_coupon_box();
 
         $couponLabel = get_option('awdp_fee_label') ? mb_strtolower ( get_option('awdp_fee_label') ) : 'discount';
         // $styleLabel = get_option('awdp_fee_label') ? str_replace(' ', '-', mb_strtolower ( get_option('awdp_fee_label') ) ) : 'discount'; 
         $bordercolor = get_option('awdp_table_border') ? get_option('awdp_table_border') : ''; 
         $tablefontsize = get_option('awdp_tablefontsize') ? ( get_option('awdp_tablefontsize') != '0' ? get_option('awdp_tablefontsize') : '' ) : ''; ?>
 
-        <style> .wdp_table_outter{padding:10px 0;} .wdp_table_outter h4{margin: 10px 0 15px 0;} table.wdp_table{border-top-style:solid; border-top-width:1px !important; border-top-color:<?php if ( $bordercolor == '' ) echo 'inherit'; else echo $bordercolor; ?>; border-right-style:solid; border-right-width:1px !important; border-right-color:<?php if ( $bordercolor == '' ) echo 'inherit'; else echo $bordercolor; ?>;border-collapse: collapse; margin-bottom:0px; <?php if ( $tablefontsize ) { echo 'font-size:'.$tablefontsize.'px'; } ?> } table.wdp_table td{border-bottom-style:solid; border-bottom-width:1px !important; border-bottom-color:<?php if ( $bordercolor == '' ) echo 'inherit'; else echo $bordercolor; ?>; border-left-style:solid; border-left-width:1px !important; border-left-color:<?php if ( $bordercolor == '' ) echo 'inherit'; else echo $bordercolor; ?>; padding:10px 20px !important;} <?php if( $bordercolor != '' ) { ?> table.wdp_table td, table.wdp_table tr { border: 1px solid <?php echo $bordercolor; ?> } <?php } ?>table.wdp_table.lay_horzntl td{padding:10px 15px !important;} a[data-coupon="<?php echo $couponLabel; ?>"]{ display: none; } .wdp_helpText{ font-size: 12px; top: 5px; position: relative; } @media screen and (max-width: 640px) { table.wdp_table.lay_horzntl { width:100%; } table.wdp_table.lay_horzntl tbody.wdp_table_body { width:100%; display:block; } table.wdp_table.lay_horzntl tbody.wdp_table_body tr { display:inline-block; width:50%; box-sizing:border-box; } table.wdp_table.lay_horzntl tbody.wdp_table_body tr td {display: block; text-align:left;}} <?php if ( $hideCouponBox )  { ?> .woocommerce-cart-form .coupon, .woocommerce-cart .coupon, .woocommerce-form-coupon-toggle, .woocommerce .checkout_coupon { display:none !important; } <?php } ?> .awdpOfferMsg { width: 100%; float: left; margin: 20px 0px; box-sizing: border-box; display: block !important; } .awdpOfferMsg span, .awdpOfferMsg div { display: inline-block; } .wdp_miniCart { border: none !important; line-height: 30px; width: 100%; float: left; margin: 0px 0 30px 0; } .wdp_miniCart strong{ float: left; } /* .wdp_miniCart span { float: right; } */ .wdp_miniCart .woocommerce-Price-amount{ float: right; } .wdp_miniCart span.wdpLabel { float: left; } .theme-astra .wdp_miniCart{ float: none; } </style>
+        <style> .wdp_table_outter{padding:10px 0;} .wdp_table_outter h4{margin: 10px 0 15px 0;} table.wdp_table{border-top-style:solid; border-top-width:1px !important; border-top-color:<?php if ( $bordercolor == '' ) echo 'inherit'; else echo $bordercolor; ?>; border-right-style:solid; border-right-width:1px !important; border-right-color:<?php if ( $bordercolor == '' ) echo 'inherit'; else echo $bordercolor; ?>;border-collapse: collapse; margin-bottom:0px; <?php if ( $tablefontsize ) { echo 'font-size:'.$tablefontsize.'px'; } ?> } table.wdp_table td{border-bottom-style:solid; border-bottom-width:1px !important; border-bottom-color:<?php if ( $bordercolor == '' ) echo 'inherit'; else echo $bordercolor; ?>; border-left-style:solid; border-left-width:1px !important; border-left-color:<?php if ( $bordercolor == '' ) echo 'inherit'; else echo $bordercolor; ?>; padding:10px 20px !important;} <?php if( $bordercolor != '' ) { ?> table.wdp_table td, table.wdp_table tr { border: 1px solid <?php echo $bordercolor; ?> } <?php } ?>table.wdp_table.lay_horzntl td{padding:10px 15px !important;} a[data-coupon="<?php echo $couponLabel; ?>"]{ display: none; } .wdp_helpText{ font-size: 12px; top: 5px; position: relative; } @media screen and (max-width: 640px) { table.wdp_table.lay_horzntl { width:100%; } table.wdp_table.lay_horzntl tbody.wdp_table_body { width:100%; display:block; } table.wdp_table.lay_horzntl tbody.wdp_table_body tr { display:inline-block; width:50%; box-sizing:border-box; } table.wdp_table.lay_horzntl tbody.wdp_table_body tr td {display: block; text-align:left;}} <?php if ( $hideCouponBox )  { ?> .woocommerce-cart-form .coupon, .woocommerce-cart .coupon, .woocommerce-form-coupon-toggle, .woocommerce .checkout_coupon { display:none !important; } <?php } ?> .awdpOfferMsg { width: 100%; float: left; margin: 20px 0px; box-sizing: border-box; display: block !important; } .awdpOfferMsg span, .awdpOfferMsg div { display: inline-block; } .wdp_miniCart { border: none !important; line-height: 30px; width: 100%; float: left; margin: 0px 0 30px 0; } .wdp_miniCart strong{ float: left; } /* .wdp_miniCart span { float: right; } */ .wdp_miniCart .woocommerce-Price-amount{ float: right; } .wdp_miniCart span.wdpLabel { float: left; } .theme-astra .wdp_miniCart{ float: none; } .wc-block-mini-cart .wc-block-components-product-price del, .wc-block-mini-cart .wc-block-components-product-price__regular, .widget_shopping_cart del, .woocommerce-mini-cart del { display: none !important; } </style>
 
         <?php 
 

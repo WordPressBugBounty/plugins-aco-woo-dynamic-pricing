@@ -196,6 +196,9 @@ class AWDP_Discount_Coupon extends AWDP_Discount_Module
             return true;
         }
 
+        // dynamic_pricing_only: strip any non-virtual WooCommerce coupons.
+        $this->remove_regular_coupons_if_blocked();
+
         $coupon_applied = in_array($coupon_code, $woocommerce->cart->get_applied_coupons(), true);
 
         if ( $this->owner->apply_wdp_coupon && !empty($this->owner->discounts) ) {
@@ -215,10 +218,30 @@ class AWDP_Discount_Coupon extends AWDP_Discount_Module
 
         }
 
-        $applied_coupons = WC()->cart->get_applied_coupons();
-
         return true;
 
+    }
+
+    /**
+     * Remove store coupons when Dynamic Pricing is set to apply alone.
+     */
+    public function remove_regular_coupons_if_blocked()
+    {
+        static $removing = false;
+
+        if ( $removing || ! awdp_should_block_regular_coupons() || ! WC()->cart ) {
+            return;
+        }
+
+        $removing = true;
+
+        foreach ( WC()->cart->get_applied_coupons() as $code ) {
+            if ( ! awdp_is_virtual_coupon_code( $code ) ) {
+                WC()->cart->remove_coupon( $code );
+            }
+        }
+
+        $removing = false;
     }
 
 

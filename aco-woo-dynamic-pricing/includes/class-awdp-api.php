@@ -310,29 +310,23 @@ class AWDP_Api
     {
 
         $data           = $data->get_params();
-        $newIndex       = $data['newIndex'];
-        $oldIndex       = $data['oldIndex'];
-        $ruleID         = $data['ruleID'];
-        $items          = $data['items'];
-        $firstChange    = false;
+        $items          = isset( $data['items'] ) ? $data['items'] : array();
         // Setting flag for first time index change
         if ( get_option ( 'awdp_orderChange' ) === false ) { 
             add_option ( 'awdp_orderChange', 1 );
-            $firstChange = true;
         }
-        // Change the index
-        if ( $firstChange ) { 
+        // Reassign sequential priorities from the full posted order so page-local
+        // drags cannot leave gaps or collisions with rules on other pages.
+        if ( is_array( $items ) ) {
             foreach ( $items as $key => $value ) {
-                $priority = $key + 1;
+                if ( empty( $value['discount_id'] ) ) {
+                    continue;
+                }
+                $priority = isset( $value['discount_priority'] ) ? intval( $value['discount_priority'] ) : ( $key + 1 );
+                if ( $priority < 1 ) {
+                    $priority = $key + 1;
+                }
                 update_post_meta( $value['discount_id'], 'discount_priority', $priority );
-            }
-        } else { 
-            // itterating upto max index change
-            $changeIndex = $oldIndex > $newIndex ? $oldIndex : $newIndex;
-            $splitItems = array_slice ( $items, 0, $changeIndex + 1 );
-            foreach ( $splitItems as $key => $value ) {
-                $priority = $key + 1;
-                update_post_meta( $value['discount_id'], 'discount_priority', $priority ); 
             }
         }
         // End index change
@@ -512,7 +506,7 @@ class AWDP_Api
                 'discount_date'     => get_the_date('d M Y', $listID),
                 'discount_priority' => get_post_meta($listID, 'discount_priority', true),
                 'discount_type_name' => array_key_exists ( get_post_meta($listID, 'discount_type', true), $discount_type_name ) ? $discount_type_name[get_post_meta($listID, 'discount_type', true)] : '',
-                'disableDrag'       => true,
+                'disableDrag'       => false,
             );
             $order_index++;
         }
@@ -765,7 +759,16 @@ class AWDP_Api
 
             $hide_coupon_box            = $data['hide_coupon_box'] ? $data['hide_coupon_box'] : '';
             $disable_discount           = $data['disable_discount'] ? $data['disable_discount'] : '';
-            // $apply_coupon_discount      = $data['apply_coupon_discount'] ? $data['apply_coupon_discount'] : '';
+            // Prefer the new coupon_interaction setting; fall back to legacy toggles.
+            if ( ! empty( $data['coupon_interaction'] ) && in_array( $data['coupon_interaction'], awdp_coupon_interaction_modes(), true ) ) {
+                $coupon_interaction = $data['coupon_interaction'];
+            } elseif ( $hide_coupon_box ) {
+                $coupon_interaction = 'dynamic_pricing_only';
+            } elseif ( $disable_discount ) {
+                $coupon_interaction = 'coupons_only';
+            } else {
+                $coupon_interaction = 'both';
+            }
 
             $enable_dismessage          = $data['enable_dismessage'] ? $data['enable_dismessage'] : '';
             $dismessage                 = $data['dismessage'] ? $data['dismessage'] : '';
@@ -995,6 +998,9 @@ class AWDP_Api
             else
                 update_option('awdp_disable_discount', $disable_discount );
 
+            // Canonical coupon interaction mode (also syncs legacy flags).
+            awdp_set_coupon_interaction_mode( $coupon_interaction );
+
             if ( false === get_option('awdp_disc_desc_config') )
                 add_option('awdp_disc_desc_config', $disc_desc_config, '', 'yes');
             else
@@ -1079,6 +1085,7 @@ class AWDP_Api
 
         $result['hide_coupon_box']              = get_option('awdp_hide_coupon_box') ? get_option('awdp_hide_coupon_box') : '';
         $result['disable_discount']             = get_option('awdp_disable_discount') ? get_option('awdp_disable_discount') : '';
+        $result['coupon_interaction']           = awdp_get_coupon_interaction_mode();
         // $result['apply_coupon_discount']        = get_option('awdp_apply_coupon_discount') ? get_option('awdp_apply_coupon_discount') : '';
 
         $result['enable_dismessage']            = array_key_exists ( 'enable_dismessage', $disc_desc_config_saved ) ? $disc_desc_config_saved['enable_dismessage'] : '';
@@ -1242,12 +1249,14 @@ class AWDP_Api
 
         $customPL       = isset($data['customPL']) ? $data['customPL'] : ''; 
 
-        $schedules      = isset($data['schedules']) ? $data['schedules'] : '';
+        $schedules      = ( isset($data['schedules']) && is_array($data['schedules']) ) ? $data['schedules'] : array();
         $schedule_array = [];
         $key = 0;
+        $latest_end = '';
+        $has_open_ended = false;
         foreach($schedules as $schedule){ 
             // Start Date
-            if($schedule['start_date']){
+            if( !empty($schedule['start_date']) ){
                 $start_date = $schedule['start_date'];
                 $start_date = date("Y-m-d H:i:s", strtotime($start_date));
                 if( ( strtotime(get_post_meta($id, 'discount_start_date', true)) > strtotime($start_date) ) || $key == 0 ) {
@@ -1256,21 +1265,28 @@ class AWDP_Api
             } else {
                 $start_date = '';
             }
-            // End Date
-            if($schedule['end_date']){
-                $end_date = $schedule['end_date'];
-                $end_date = date("Y-m-d H:i:s", strtotime($end_date));
-                if( ( strtotime(get_post_meta($id, 'discount_end_date', true)) < strtotime($end_date) ) || $key == 0 ) {
-                    update_post_meta($id, 'discount_end_date', $end_date);
-                } 
+            // End Date — empty means unlimited / no expiry
+            if( !empty($schedule['end_date']) ){
+                $end_timestamp = strtotime($schedule['end_date']);
+                if ( $end_timestamp ) {
+                    $end_date = date("Y-m-d H:i:s", $end_timestamp);
+                    if ( $latest_end === '' || strtotime($end_date) > strtotime($latest_end) ) {
+                        $latest_end = $end_date;
+                    }
+                } else {
+                    $end_date = '';
+                    $has_open_ended = true;
+                }
             } else {
-                update_post_meta($id, 'discount_end_date', '');
                 $end_date = '';
+                $has_open_ended = true;
             }
             $schedule_array[$key]['start_date'] = $start_date;
             $schedule_array[$key]['end_date'] = $end_date;
             $key++;
         }
+
+        update_post_meta($id, 'discount_end_date', ( $has_open_ended || $latest_end === '' ) ? '' : $latest_end);
 
         $serialize_data     = array_values($schedule_array);
         $schedule_serialize = serialize($serialize_data);
@@ -1335,11 +1351,21 @@ class AWDP_Api
             $discount_config    = get_post_meta($discount_rule->ID, 'discount_config', true) ? get_post_meta($discount_rule->ID, 'discount_config', true) : [];
 
             // Scheduling dates
+            $schedules = array();
             if(get_post_meta($discount_rule->ID, 'discount_schedules', true)){
-                $schedules = unserialize(get_post_meta($discount_rule->ID, 'discount_schedules', true));
-            } else if(get_post_meta($discount_rule->ID, 'discount_start_date', true) && get_post_meta($discount_rule->ID, 'discount_end_date', true)){ // data before scheduling
+                $stored_schedules = unserialize(get_post_meta($discount_rule->ID, 'discount_schedules', true));
+                if ( is_array($stored_schedules) ) {
+                    $schedules = $stored_schedules;
+                }
+            } else if(get_post_meta($discount_rule->ID, 'discount_start_date', true)){ // data before scheduling
                 $schedules[0]['start_date'] = get_post_meta($discount_rule->ID, 'discount_start_date', true);
-                $schedules[0]['end_date'] = get_post_meta($discount_rule->ID, 'discount_end_date', true);
+                $schedules[0]['end_date'] = get_post_meta($discount_rule->ID, 'discount_end_date', true) ? get_post_meta($discount_rule->ID, 'discount_end_date', true) : '';
+            }
+
+            foreach ( $schedules as $schedule_key => $schedule_row ) {
+                if ( empty($schedule_row['end_date']) ) {
+                    $schedules[$schedule_key]['end_date'] = '';
+                }
             }
 
             $PListID = (int)get_post_meta($discount_rule->ID, 'discount_product_list', true);

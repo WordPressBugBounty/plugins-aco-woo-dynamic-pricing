@@ -120,7 +120,9 @@ class AWDP_Discount_Wcpa extends AWDP_Discount_Module
         $variation_id       = isset( $_GET['varID'] ) ? absint( $_GET['varID'] ) : 0;
         $itemCount          = isset( $_GET['proCount'] ) ? absint( $_GET['proCount'] ) : 1;
         $product            = $variation_id ? wc_get_product ( $variation_id ) : wc_get_product ( $post_id ); 
-        if ( !$product ) return '';
+        if ( ! $product ) {
+            return wp_json_encode( array( 'hasDiscount' => false ) );
+        }
 
         update_option('itemCount', $itemCount);
 
@@ -148,9 +150,10 @@ class AWDP_Discount_Wcpa extends AWDP_Discount_Module
         // Load discount rules
         $this->owner->rules->load_rules();
 
-        // Check if discount is active
-        if ( $this->owner->discount_rules == null )
-            return $price; // Exit if no rules
+        // No rules / no applied discount → do not feed catalog price into WCPA (formula/lookup products often have catalog 0).
+        if ( $this->owner->discount_rules == null ) {
+            return wp_json_encode( array( 'hasDiscount' => false ) );
+        }
 
             
         // Load Product List
@@ -164,22 +167,16 @@ class AWDP_Discount_Wcpa extends AWDP_Discount_Module
         $cartRules          = $this->owner->awdp_cart_rules;
         $item_price         = $price;
 
-        // if ( $discountedPrice ) {
-        //     $product_id     = $_REQUEST['product_id']; 
-        // }
         $priceGroup = call_user_func_array ( 
             array ( new AWDP_productGroup(), 'product_price' ), 
             array ( $rules, $price, $post_id, $product, $prodLists, $cartRules, $item_price,$itemCount) 
         ); 
 
-        // if ( is_array ( $priceGroup ) ) {
-        //     return new WP_REST_Response($priceGroup, 200);
-        // }
-
-        if ( is_array ( $priceGroup ) ) {
-            return json_encode($priceGroup);
+        if ( is_array( $priceGroup ) && ! empty( $priceGroup['hasDiscount'] ) ) {
+            return wp_json_encode( $priceGroup );
         }
-        return  $price;
+
+        return wp_json_encode( array( 'hasDiscount' => false ) );
 
     }
 
@@ -279,18 +276,29 @@ class AWDP_Discount_Wcpa extends AWDP_Discount_Module
             array ( $rules, $price, $post_id, $product, $prodLists, $cartRules, $item_price, $display_price ) 
         ); 
 
-        $wcpaPrice = call_user_func_array ( 
-            array ( new AWDP_productGroup(), 'product_price' ), 
-            array ( $rules, $price, $post_id, $product, $prodLists, $cartRules, $item_price) 
-        );
+        if ( is_array ( $viewPrice ) ) {
 
-        if ( is_array ( $viewPrice ) || is_array ( $wcpaPrice ) ) {
+            $discounted = array_key_exists( 'discountedPrice', $viewPrice ) ? $viewPrice['discountedPrice'] : '';
 
-            // $updatedPrice   = $viewPrice['discountedPrice'];
+            // No applicable AWDP discount — never clobber WCPA formula/lookup unit price with ''/catalog.
+            if ( ! awdp_has_applied_discount_price( $discounted ) ) {
+                return $default;
+            }
 
-            $result['price']            =  $viewPrice['discountedPrice'] ?  $viewPrice['discountedPrice'] : $wcpaPrice['price'];
-            $result['originalPrice']    = $price;
+            // Safety: catalog/base is empty but WCPA already has a real price — do not replace with 0.
+            if ( ( $discounted === 0 || $discounted === '0' )
+                && is_array( $default )
+                && ! empty( $default['price'] )
+                && (float) $default['price'] > 0
+                && (float) $price <= 0
+            ) {
+                return $default;
+            }
 
+            $result['price']         = $discounted;
+            $result['originalPrice'] = ( is_array( $default ) && isset( $default['price'] ) )
+                ? $default['price']
+                : $price;
             return $result;
             
         }
