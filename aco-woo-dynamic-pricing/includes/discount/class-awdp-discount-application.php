@@ -37,12 +37,27 @@ class AWDP_Discount_Application
     }
 
     /**
+     * Whether a per-line entry was redirected to the virtual coupon because set_price() did not stick.
+     *
+     * @param array $discount_entry Per-line discount data.
+     */
+    public static function entry_uses_coupon_fallback($discount_entry = array())
+    {
+        return is_array($discount_entry) && !empty($discount_entry['coupon_fallback']);
+    }
+
+    /**
      * @param string $discount_type Rule type slug.
      * @param int    $rule_id       Rule post ID.
      * @param array  $discount_entry Per-line discount data (optional).
      */
     public static function applies_to_line_price($discount_type, $rule_id = 0, $discount_entry = array())
     {
+        // Line apply failed for this entry — coupon is the sole mechanism (avoid double discount).
+        if (self::entry_uses_coupon_fallback($discount_entry)) {
+            return false;
+        }
+
         if (in_array($discount_type, self::line_price_discount_types(), true)) {
             return true;
         }
@@ -71,6 +86,10 @@ class AWDP_Discount_Application
      */
     public static function applies_to_coupon($discount_type, $rule_id = 0, $discount_entry = array())
     {
+        if (self::entry_uses_coupon_fallback($discount_entry)) {
+            return true;
+        }
+
         if (in_array($discount_type, self::coupon_discount_types(), true)) {
             return true;
         }

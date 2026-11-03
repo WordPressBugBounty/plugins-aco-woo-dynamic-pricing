@@ -65,10 +65,15 @@ class AWDP_Front_End
         // $couponStatus   = get_option('awdp_apply_coupon_discount') ? get_option('awdp_apply_coupon_discount') : false;
         $couponStatus   = false;
         
-        add_action('init', array($this, 'register_awdp_discounts'));
+        // This object is built during init, and a callback added to the running init priority never runs.
+        if ( did_action( 'init' ) ) {
+            $this->register_awdp_discounts();
+        } else {
+            add_action('init', array($this, 'register_awdp_discounts'));
+        }
 
         // Deactivation hook
-        add_action( 'deactivate_' . plugin_basename(dirname(AWDP_FILE)), array( $this, 'awdp_plugin_deactivate') );
+        add_action( 'deactivate_' . plugin_basename( AWDP_FILE ), array( $this, 'awdp_plugin_deactivate') );
 
         if ( $this->awdp_check_woocommerce_active() ) {
 
@@ -211,6 +216,9 @@ class AWDP_Front_End
             // add_action( 'woocommerce_add_order_item_meta', array( $this, 'wdpOrderMeta'), 10, 3 );
             add_action( 'woocommerce_new_order_item', array( $this, 'wdpOrderMeta'), 10, 3 );
             add_action( 'woocommerce_after_order_itemmeta', array( $this, 'wdpDisplayOrderMeta'), 10, 3 );
+            // Thank-you page, My Account and emails: original vs paid line subtotal and a Discount row.
+            add_filter( 'woocommerce_order_formatted_line_subtotal', array( $this, 'formatted_order_line_subtotal' ), 10, 3 );
+            add_filter( 'woocommerce_get_order_item_totals', array( $this, 'order_item_totals' ), 10, 3 );
             add_filter( 'woocommerce_hidden_order_itemmeta', array( $this, 'hide_awdp_order_item_meta' ), 10, 1 );
             add_filter( 'woocommerce_order_item_get_formatted_meta_data', array( $this, 'filter_awdp_formatted_order_item_meta' ), 10, 2 );
 
@@ -713,6 +721,22 @@ class AWDP_Front_End
         echo $this->discount->wdpDisplayOrderMeta( $item_id, $item, $product );
 
     }
+
+    /**
+     * Order details / emails: original vs discounted line subtotal.
+     */
+    public function formatted_order_line_subtotal( $subtotal, $item, $order )
+    {
+        return $this->discount->format_order_line_subtotal_html( $subtotal, $item, $order );
+    }
+
+    /**
+     * Order details / emails: Discount row for product-rule savings.
+     */
+    public function order_item_totals( $total_rows, $order, $tax_display = '' )
+    {
+        return $this->discount->filter_order_item_totals( $total_rows, $order, $tax_display );
+    }
     
     /**
      * Load frontend Javascript.
@@ -1013,7 +1037,8 @@ class AWDP_Front_End
      * Mini-cart "qty × price" uses the calculated line unit only (no strike-through).
      *
      * Classic mini-cart reuses woocommerce_cart_item_price, which may include a
-     * struck original for the main cart. Replace it with the applicable price.
+     * struck original for the main cart. Replace only that price inside the
+     * received HTML so theme/plugin markup (quantity inputs, remove links) is kept.
      *
      * @param string $html          Default quantity HTML.
      * @param array  $cart_item     Cart line.
@@ -1021,27 +1046,33 @@ class AWDP_Front_End
      * @return string
      */
     public function widget_cart_item_quantity( $html, $cart_item, $cart_item_key ) {
-        if ( empty( $cart_item['awdp_price_before_discount'] ) ) {
+        if ( empty( $cart_item['awdp_price_before_discount'] ) || ! function_exists( 'WC' ) || ! WC()->cart ) {
             return $html;
         }
 
-        $unit = $this->discount->get_cart_item_calculated_unit_price( $cart_item );
-        if ( $unit === null ) {
+        $unit_display = $this->discount->get_cart_item_display_unit_price( $cart_item );
+        if ( $unit_display === null ) {
             return $html;
         }
 
         $original = (float) $cart_item['awdp_price_before_discount'];
-        if ( $original <= $unit + 0.0001 ) {
+        if ( awdp_get_cart_tax_display_amount( $cart_item['data'], $original ) <= $unit_display + 0.0001 ) {
             return $html;
         }
 
         $addon_unit = function_exists( 'awdp_get_wcpa_display_addon_unit' )
             ? awdp_get_wcpa_display_addon_unit( $cart_item )
             : 0;
-        $qty        = isset( $cart_item['quantity'] ) ? $cart_item['quantity'] : 1;
-        $price_html = wc_price( $unit + (float) $addon_unit );
+        $price_html = wc_price( $unit_display + (float) $addon_unit );
 
-        return '<span class="quantity">' . sprintf( '%s &times; %s', $qty, $price_html ) . '</span>';
+        // Price HTML the mini-cart template built and passed into this filter.
+        $product            = apply_filters( 'woocommerce_cart_item_product', $cart_item['data'], $cart_item, $cart_item_key );
+        $default_price_html = apply_filters( 'woocommerce_cart_item_price', WC()->cart->get_product_price( $product ), $cart_item, $cart_item_key );
+
+        $merged = awdp_replace_html_fragment( $html, $default_price_html, $price_html );
+
+        // Custom mini-cart markup: keep it (the discounted price is already in it via cart_price_view).
+        return null === $merged ? $html : $merged;
     }
 
     /**
@@ -1122,17 +1153,11 @@ class AWDP_Front_End
 
     // Deactivate plugin
     public function awdp_plugin_deactivate() {
-        global $wpdb;
-        // $wpdb->query( 
-        //     $wpdb->prepare( 
-        //         "DELETE pm FROM {$wpdb->prefix}postmeta pm INNER JOIN {$wpdb->prefix}posts wp ON wp.ID = pm.post_id WHERE pm.meta_key = '".AWDP_Feed_Attribute."';" 
-        //     )
-        // );
-        $wpdb->query( 
-            $wpdb->prepare( 
-                "UPDATE {$wpdb->prefix}postmeta pm INNER JOIN {$wpdb->prefix}posts p on p.ID = pm.post_id SET pm.meta_value = '' WHERE pm.meta_key = '".AWDP_Feed_Attribute."';"
-            )
-        );
+        // Only clear cached product lists so whatever runs next (including Pro) rebuilds them.
+        // The acowdp_sale_price feed meta is left alone: Pro deactivates this plugin when it
+        // is activated, and blanking the meta then would empty feed prices during an upgrade.
+        delete_transient( AWDP_PRODUCTS_TRANSIENT_KEY );
+        delete_transient( AWDP_PRODUCTS_LANG_TRANSIENT_KEY );
     }
 
     // Inline Styles
@@ -1141,10 +1166,10 @@ class AWDP_Front_End
         // Hide Coupon Box (Dynamic Pricing only mode, or legacy flag).
         $hideCouponBox = awdp_should_hide_coupon_box();
 
-        $couponLabel = get_option('awdp_fee_label') ? mb_strtolower ( get_option('awdp_fee_label') ) : 'discount';
-        // $styleLabel = get_option('awdp_fee_label') ? str_replace(' ', '-', mb_strtolower ( get_option('awdp_fee_label') ) ) : 'discount'; 
-        $bordercolor = get_option('awdp_table_border') ? get_option('awdp_table_border') : ''; 
-        $tablefontsize = get_option('awdp_tablefontsize') ? ( get_option('awdp_tablefontsize') != '0' ? get_option('awdp_tablefontsize') : '' ) : ''; ?>
+        $couponLabel = get_option('awdp_fee_label') ? awdp_free_css_string( mb_strtolower ( get_option('awdp_fee_label') ) ) : 'discount';
+        // $styleLabel = get_option('awdp_fee_label') ? str_replace(' ', '-', mb_strtolower ( get_option('awdp_fee_label') ) ) : 'discount';
+        $bordercolor = awdp_free_sanitize_css_color( get_option('awdp_table_border') );
+        $tablefontsize = get_option('awdp_tablefontsize') ? ( get_option('awdp_tablefontsize') != '0' ? awdp_free_sanitize_number( get_option('awdp_tablefontsize') ) : '' ) : ''; ?>
 
         <style> .wdp_table_outter{padding:10px 0;} .wdp_table_outter h4{margin: 10px 0 15px 0;} table.wdp_table{border-top-style:solid; border-top-width:1px !important; border-top-color:<?php if ( $bordercolor == '' ) echo 'inherit'; else echo $bordercolor; ?>; border-right-style:solid; border-right-width:1px !important; border-right-color:<?php if ( $bordercolor == '' ) echo 'inherit'; else echo $bordercolor; ?>;border-collapse: collapse; margin-bottom:0px; <?php if ( $tablefontsize ) { echo 'font-size:'.$tablefontsize.'px'; } ?> } table.wdp_table td{border-bottom-style:solid; border-bottom-width:1px !important; border-bottom-color:<?php if ( $bordercolor == '' ) echo 'inherit'; else echo $bordercolor; ?>; border-left-style:solid; border-left-width:1px !important; border-left-color:<?php if ( $bordercolor == '' ) echo 'inherit'; else echo $bordercolor; ?>; padding:10px 20px !important;} <?php if( $bordercolor != '' ) { ?> table.wdp_table td, table.wdp_table tr { border: 1px solid <?php echo $bordercolor; ?> } <?php } ?>table.wdp_table.lay_horzntl td{padding:10px 15px !important;} a[data-coupon="<?php echo $couponLabel; ?>"]{ display: none; } .wdp_helpText{ font-size: 12px; top: 5px; position: relative; } @media screen and (max-width: 640px) { table.wdp_table.lay_horzntl { width:100%; } table.wdp_table.lay_horzntl tbody.wdp_table_body { width:100%; display:block; } table.wdp_table.lay_horzntl tbody.wdp_table_body tr { display:inline-block; width:50%; box-sizing:border-box; } table.wdp_table.lay_horzntl tbody.wdp_table_body tr td {display: block; text-align:left;}} <?php if ( $hideCouponBox )  { ?> .woocommerce-cart-form .coupon, .woocommerce-cart .coupon, .woocommerce-form-coupon-toggle, .woocommerce .checkout_coupon { display:none !important; } <?php } ?> .awdpOfferMsg { width: 100%; float: left; margin: 20px 0px; box-sizing: border-box; display: block !important; } .awdpOfferMsg span, .awdpOfferMsg div { display: inline-block; } .wdp_miniCart { border: none !important; line-height: 30px; width: 100%; float: left; margin: 0px 0 30px 0; } .wdp_miniCart strong{ float: left; } /* .wdp_miniCart span { float: right; } */ .wdp_miniCart .woocommerce-Price-amount{ float: right; } .wdp_miniCart span.wdpLabel { float: left; } .theme-astra .wdp_miniCart{ float: none; } .wc-block-mini-cart .wc-block-components-product-price del, .wc-block-mini-cart .wc-block-components-product-price__regular, .widget_shopping_cart del, .woocommerce-mini-cart del { display: none !important; } </style>
 

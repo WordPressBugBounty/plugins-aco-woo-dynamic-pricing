@@ -355,7 +355,11 @@ class AWDP_Discount_Cart extends AWDP_Discount_Module
     { 
 
         if ( $this->cart_item_uses_line_price( $cart_item ) ) {
-            return $this->format_line_item_subtotal_html( $cart_item, $wc );
+            $line_subtotal_html = $this->format_line_item_subtotal_html( $cart_item, $wc );
+
+            return $line_subtotal_html === $wc
+                ? $wc
+                : $this->merge_cart_item_subtotal_html( $wc, $line_subtotal_html, $cart_item, $cart_item_key );
         }
 
         $activeDiscounts    = $this->owner->discounts;
@@ -367,8 +371,9 @@ class AWDP_Discount_Cart extends AWDP_Discount_Module
         /*
         * ver @ 4.3.3
         * Tax Settings
+        * Line subtotals follow the cart/checkout tax display, like WooCommerce's own subtotal.
         */
-        $tax_display_mode   = get_option( 'woocommerce_tax_display_shop' );
+        $tax_display_mode   = awdp_cart_display_prices_including_tax() ? 'incl' : 'excl';
 
         $cartPrice          = $cart_item['data']->get_price();
         // Checking for addons price (discount product portion only; honor excludeFromDiscount / disable_addon)
@@ -407,6 +412,11 @@ class AWDP_Discount_Cart extends AWDP_Discount_Module
                 }
             } 
 
+            // Nothing to show for this line — keep WooCommerce / other plugins' subtotal HTML.
+            if ( $discount <= 0 ) {
+                return $wc;
+            }
+
             $discount           = ( 'incl' === $tax_display_mode ) ? round( wc_get_price_including_tax( $product, array ( 'price' => $discount ) ),$decimalPoints ) : round( wc_get_price_excluding_tax( $product, array ( 'price' => $discount ) ), $decimalPoints );
             $discounted_price   = ( $price - $discount ) * $quantity;
          
@@ -420,7 +430,7 @@ class AWDP_Discount_Cart extends AWDP_Discount_Module
                 }
             }
 
-            return $product_subtotal;
+            return $this->merge_cart_item_subtotal_html( $wc, $product_subtotal, $cart_item, $cart_item_key );
 
         } else {
 
@@ -693,6 +703,9 @@ class AWDP_Discount_Cart extends AWDP_Discount_Module
     /**
      * Applies product-level discounts directly on cart line item prices.
      *
+     * After set_price(), re-reads the effective unit. If it did not stick (e.g. third-party
+     * product types that reject empty/zero prices), marks that line for virtual-coupon fallback.
+     *
      * @param WC_Cart $cartObject Cart instance.
      */
     protected function apply_product_line_prices_to_cart($cartObject)
@@ -708,6 +721,7 @@ class AWDP_Discount_Cart extends AWDP_Discount_Module
 
             $new_unit_price = $this->resolve_line_item_unit_price($cart_key, $cart_content);
 
+            // null = no discount to apply; 0 is a valid 100% discounted unit.
             if ($new_unit_price === null) {
                 continue;
             }
@@ -736,10 +750,115 @@ class AWDP_Discount_Cart extends AWDP_Discount_Module
                 $cartObject->cart_contents[ $cart_key ]['awdp_wcpa_addon_unit'] = awdp_get_wcpa_addon_unit_amount( $addon_data );
             }
 
+            $restore_unit = isset( $cartObject->cart_contents[ $cart_key ]['awdp_price_before_discount'] )
+                ? (float) $cartObject->cart_contents[ $cart_key ]['awdp_price_before_discount']
+                : $current_unit;
+
             // Split mode: set discounted product unit only — do not bake addons into set_price.
-            $cart_content['data']->set_price($new_unit_price);
+            $cart_content['data']->set_price( $new_unit_price );
+
+            $effective_unit = $this->get_cart_product_effective_unit_price( $cart_content['data'] );
+            $price_stuck    = $this->line_unit_price_matches( $effective_unit, $new_unit_price );
+
+            $force_coupon = (bool) apply_filters(
+                'awdp_force_coupon_fallback',
+                false,
+                $cart_key,
+                $cart_content,
+                $new_unit_price,
+                $effective_unit
+            );
+
+            $line_failed = (bool) apply_filters(
+                'awdp_line_price_application_failed',
+                ! $price_stuck,
+                $cart_key,
+                $cart_content,
+                $new_unit_price,
+                $effective_unit
+            );
+
+            if ( $line_failed || $force_coupon ) {
+                // Ensure coupon is the only discount: undo any sticky set_price and drop line markers.
+                $cart_content['data']->set_price( $restore_unit );
+                $this->mark_line_price_coupon_fallback( $cart_key, $cartObject );
+                continue;
+            }
+
             $this->owner->product_line_prices_applied = true;
         }
+    }
+
+
+    /**
+     * Effective unit price from the cart product (same API cart totals tend to use).
+     *
+     * @param WC_Product $product Cart product object.
+     * @return float
+     */
+    protected function get_cart_product_effective_unit_price( $product )
+    {
+        if ( ! is_object( $product ) || ! is_callable( array( $product, 'get_price' ) ) ) {
+            return 0.0;
+        }
+
+        return (float) $product->get_price( 'edit' );
+    }
+
+
+    /**
+     * Whether the effective unit matches the intended discounted unit (0 is valid).
+     *
+     * @param float $effective Effective unit after set_price().
+     * @param float $intended  Intended discounted unit.
+     * @return bool
+     */
+    protected function line_unit_price_matches( $effective, $intended )
+    {
+        return abs( (float) $effective - (float) $intended ) < 0.0001;
+    }
+
+
+    /**
+     * Route this cart line's product discounts through the virtual coupon instead of line price.
+     *
+     * @param string  $cart_key    Cart item key.
+     * @param WC_Cart $cartObject  Cart instance.
+     */
+    protected function mark_line_price_coupon_fallback( $cart_key, $cartObject )
+    {
+        if ( ! empty( $this->owner->discounts ) ) {
+            foreach ( $this->owner->discounts as $rule_id => $discounts ) {
+                if ( ! array_key_exists( 'discounts', $discounts ) || ! array_key_exists( $cart_key, $discounts['discounts'] ) ) {
+                    continue;
+                }
+
+                $entry = $discounts['discounts'][ $cart_key ];
+
+                // Still classified as line-price before the flag is set.
+                if ( ! AWDP_Discount_Application::applies_to_line_price( $discounts['discount_type'], $rule_id, $entry ) ) {
+                    continue;
+                }
+
+                $this->owner->discounts[ $rule_id ]['discounts'][ $cart_key ]['coupon_fallback'] = true;
+            }
+        }
+
+        if ( isset( $this->owner->wdp_order_meta[ $cart_key ] ) && is_array( $this->owner->wdp_order_meta[ $cart_key ] ) ) {
+            foreach ( $this->owner->wdp_order_meta[ $cart_key ] as $index => $meta ) {
+                if ( ! is_array( $meta ) ) {
+                    continue;
+                }
+                if ( ( $meta['application'] ?? '' ) === 'line_price' ) {
+                    $this->owner->wdp_order_meta[ $cart_key ][ $index ]['application'] = 'coupon';
+                }
+            }
+        }
+
+        // Avoid line-price display paths treating this as a sticky discounted unit.
+        unset( $cartObject->cart_contents[ $cart_key ]['awdp_price_before_discount'] );
+        unset( $cartObject->cart_contents[ $cart_key ]['awdp_wcpa_split'] );
+        unset( $cartObject->cart_contents[ $cart_key ]['awdp_wcpa_addon_unit'] );
     }
 
 
@@ -764,7 +883,36 @@ class AWDP_Discount_Cart extends AWDP_Discount_Module
             }
         }
 
+        // Do not treat coupon-fallback lines as pending line-price apply via cached unit.
+        if ( $this->cart_key_has_coupon_fallback( $cart_key ) ) {
+            return false;
+        }
+
         return isset($this->owner->wdp_discounted_price[$cart_key]) && $this->owner->wdp_discounted_price[$cart_key] !== '';
+    }
+
+
+    /**
+     * @param string $cart_key Cart item key.
+     * @return bool
+     */
+    protected function cart_key_has_coupon_fallback( $cart_key )
+    {
+        if ( empty( $this->owner->discounts ) ) {
+            return false;
+        }
+
+        foreach ( $this->owner->discounts as $discounts ) {
+            if ( ! array_key_exists( 'discounts', $discounts ) || ! array_key_exists( $cart_key, $discounts['discounts'] ) ) {
+                continue;
+            }
+
+            if ( AWDP_Discount_Application::entry_uses_coupon_fallback( $discounts['discounts'][ $cart_key ] ) ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
 
@@ -858,9 +1006,47 @@ class AWDP_Discount_Cart extends AWDP_Discount_Module
      * line_subtotal / quantity from the existing totals run. Does not recalculate discounts.
      *
      * @param array $cart_item Cart line.
-     * @return float|null Unit price excluding add-on display, or null if unavailable.
+     * @return float|null Unit price in the store's price-entry basis (same as get_price()),
+     *                    excluding add-on display, or null if unavailable.
      */
     public function get_cart_item_calculated_unit_price( $cart_item )
+    {
+        $resolved = $this->resolve_cart_item_calculated_unit( $cart_item );
+
+        return null === $resolved ? null : $resolved['unit'];
+    }
+
+    /**
+     * Calculated discounted unit price as shown in cart/checkout (cart tax display setting).
+     *
+     * @param array $cart_item Cart line.
+     * @return float|null Display unit price excluding add-on display, or null if unavailable.
+     */
+    public function get_cart_item_display_unit_price( $cart_item )
+    {
+        $resolved = $this->resolve_cart_item_calculated_unit( $cart_item );
+        if ( null === $resolved ) {
+            return null;
+        }
+
+        if ( null !== $resolved['display'] ) {
+            return $resolved['display'];
+        }
+
+        return awdp_get_cart_tax_display_amount( $cart_item['data'], $resolved['unit'] );
+    }
+
+    /**
+     * Resolves the calculated unit for a cart line.
+     *
+     * line_subtotal / line_subtotal_tax are always net / tax amounts, so when they are
+     * the source the display amount is taken from them directly (as WooCommerce does for
+     * the cart subtotal) instead of being converted again from the price-entry basis.
+     *
+     * @param array $cart_item Cart line.
+     * @return array|null { unit: float price-entry basis, display: float|null cart display amount }
+     */
+    protected function resolve_cart_item_calculated_unit( $cart_item )
     {
         if ( empty( $cart_item['data'] ) || ! is_object( $cart_item['data'] ) ) {
             return null;
@@ -870,28 +1056,39 @@ class AWDP_Discount_Cart extends AWDP_Discount_Module
         $qty     = isset( $cart_item['quantity'] ) ? (float) $cart_item['quantity'] : 0;
 
         if ( ! isset( $cart_item['awdp_price_before_discount'] ) ) {
-            return $current;
+            return array( 'unit' => $current, 'display' => null );
         }
 
         $original = (float) $cart_item['awdp_price_before_discount'];
 
         if ( $original > $current + 0.0001 ) {
-            return $current;
+            return array( 'unit' => $current, 'display' => null );
         }
 
         if ( $qty > 0 && isset( $cart_item['line_subtotal'] ) ) {
-            $line_unit = (float) $cart_item['line_subtotal'] / $qty;
+            $line_net = (float) $cart_item['line_subtotal'] / $qty;
+            $line_tax = isset( $cart_item['line_subtotal_tax'] ) ? (float) $cart_item['line_subtotal_tax'] / $qty : 0.0;
+
+            // Compare against the catalog base in the same basis prices were entered in.
+            $line_unit = wc_prices_include_tax() ? $line_net + $line_tax : $line_net;
+
             if ( $original > $line_unit + 0.0001 ) {
-                return $line_unit;
+                return array(
+                    'unit'    => $line_unit,
+                    'display' => awdp_cart_display_prices_including_tax() ? $line_net + $line_tax : $line_net,
+                );
             }
         }
 
         $cart_key = isset( $cart_item['key'] ) ? $cart_item['key'] : '';
         if ( $cart_key && isset( $this->owner->wdp_discounted_price[ $cart_key ] ) && $this->owner->wdp_discounted_price[ $cart_key ] !== '' ) {
-            return (float) wc_remove_number_precision( $this->owner->wdp_discounted_price[ $cart_key ] );
+            return array(
+                'unit'    => (float) wc_remove_number_precision( $this->owner->wdp_discounted_price[ $cart_key ] ),
+                'display' => null,
+            );
         }
 
-        return $current;
+        return array( 'unit' => $current, 'display' => null );
     }
 
     /**
@@ -916,23 +1113,23 @@ class AWDP_Discount_Cart extends AWDP_Discount_Module
             return $item;
         }
 
-        $unit = $this->get_cart_item_calculated_unit_price( $cart_item );
-        if ( $unit === null ) {
+        $unit_display = $this->get_cart_item_display_unit_price( $cart_item );
+        if ( $unit_display === null ) {
             return $item;
         }
 
+        $product  = $cart_item['data'];
         $original = (float) $cart_item['awdp_price_before_discount'];
-        if ( $original <= $unit + 0.0001 ) {
+        if ( awdp_get_cart_tax_display_amount( $product, $original ) <= $unit_display + 0.0001 ) {
             return $item;
         }
 
-        $product = ( isset( $cart_item['data'] ) && is_object( $cart_item['data'] ) ) ? $cart_item['data'] : null;
         $addon_unit = function_exists( 'awdp_get_wcpa_display_addon_unit' )
             ? awdp_get_wcpa_display_addon_unit( $cart_item )
             : 0;
         $strike_unit = awdp_get_cart_item_strikeout_unit_price( $cart_item, $original );
 
-        $display_unit   = awdp_get_cart_tax_display_amount( $product, $unit ) + (float) $addon_unit;
+        $display_unit   = $unit_display + (float) $addon_unit;
         $strike_display = awdp_get_cart_tax_display_amount( $product, $strike_unit ) + (float) $addon_unit;
 
         $decimals = isset( $item['prices']->currency_minor_unit )
@@ -1022,18 +1219,18 @@ class AWDP_Discount_Cart extends AWDP_Discount_Module
      */
     protected function format_line_discounted_unit_price_html($cart_item, $item_price)
     {
-        $current = $this->get_cart_item_calculated_unit_price( $cart_item );
-        if ( $current === null ) {
+        $current_unit_display = $this->get_cart_item_display_unit_price( $cart_item );
+        if ( $current_unit_display === null ) {
             return $item_price;
         }
 
         $original   = (float) $cart_item['awdp_price_before_discount'];
         $addon_unit = awdp_get_wcpa_display_addon_unit( $cart_item );
         $strike     = awdp_get_cart_item_strikeout_unit_price( $cart_item, $original );
-        $product    = ( isset( $cart_item['data'] ) && is_object( $cart_item['data'] ) ) ? $cart_item['data'] : null;
+        $product    = $cart_item['data'];
 
         $original_display = awdp_get_cart_tax_display_amount( $product, $strike ) + $addon_unit;
-        $current_display  = awdp_get_cart_tax_display_amount( $product, $current ) + $addon_unit;
+        $current_display  = $current_unit_display + $addon_unit;
 
         if ($original_display > $current_display) {
             return wc_format_sale_price($original_display, $current_display);
@@ -1093,6 +1290,32 @@ class AWDP_Discount_Cart extends AWDP_Discount_Module
         }
 
         return $product_subtotal;
+    }
+
+    /**
+     * Swaps WooCommerce's default line subtotal inside the filtered HTML for AWDP's,
+     * keeping markup earlier woocommerce_cart_item_subtotal callbacks added (e.g. remove links).
+     *
+     * @param string $prior_html    HTML received by woocommerce_cart_item_subtotal.
+     * @param string $awdp_html     AWDP subtotal HTML.
+     * @param array  $cart_item     Cart line.
+     * @param string $cart_item_key Cart item key.
+     * @return string
+     */
+    protected function merge_cart_item_subtotal_html( $prior_html, $awdp_html, $cart_item, $cart_item_key )
+    {
+        if ( ! function_exists( 'WC' ) || ! WC()->cart || empty( $cart_item['data'] ) || ! is_object( $cart_item['data'] ) ) {
+            return $awdp_html;
+        }
+
+        // Same arguments the cart / review-order templates pass into the filter chain.
+        $product      = apply_filters( 'woocommerce_cart_item_product', $cart_item['data'], $cart_item, $cart_item_key );
+        $default_html = WC()->cart->get_product_subtotal( $product, $cart_item['quantity'] );
+
+        $merged = awdp_replace_html_fragment( $prior_html, $default_html, $awdp_html );
+
+        // Default subtotal reshaped by another plugin — fall back to AWDP HTML as before.
+        return null === $merged ? $awdp_html : $merged;
     }
 
 }

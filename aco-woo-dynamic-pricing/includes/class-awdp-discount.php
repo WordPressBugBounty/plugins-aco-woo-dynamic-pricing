@@ -189,6 +189,11 @@ class AWDP_Discount
         return $this->cart->get_cart_item_calculated_unit_price($cart_item);
     }
 
+    public function get_cart_item_display_unit_price($cart_item)
+    {
+        return $this->cart->get_cart_item_display_unit_price($cart_item);
+    }
+
     public function align_store_api_cart_item_prices($item)
     {
         return $this->cart->align_store_api_cart_item_prices($item);
@@ -317,6 +322,16 @@ class AWDP_Discount
     public function wdpDisplayOrderMeta($item_id, $item, $product)
     {
         return $this->order->wdpDisplayOrderMeta($item_id, $item, $product);
+    }
+
+    public function format_order_line_subtotal_html($subtotal, $item, $order)
+    {
+        return $this->order->format_order_line_subtotal_html($subtotal, $item, $order);
+    }
+
+    public function filter_order_item_totals($total_rows, $order, $tax_display = '')
+    {
+        return $this->order->filter_order_item_totals($total_rows, $order, $tax_display);
     }
 
     public function wdpAdminOrderHeader($order)

@@ -4,10 +4,10 @@ Author URI: https://acowebs.com
 Contributors: acowebs
 Donate link:
 Tags: WooCommerce Dynamic Pricing, WooCommerce Discount rules, WooCommerce Bulk Discounts, WooCommerce Pricing Deals
-Requires at least: 4.4
-Tested up to: 7.1
+Requires at least: 6.5
+Tested up to: 7.2
 Requires PHP: 7.4
-Stable tag: 5.1.0
+Stable tag: 5.1.1
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -227,6 +227,10 @@ Yes, you can change the border color to match your theme style. We have also pro
 You will be able to use plugin in your site, but however, you won't be able to receive any further updates and priority support.
 
 == Changelog ==
+= 5.1.1 =
+* Security and stability improvements
+* Applied discounts now shown on the Thank You page and in order emails
+* Compatibility with WordPress 7.2 and WooCommerce 11.3
 = 5.1.0 =
 * Coupon interaction settings for Dynamic Pricing and WooCommerce coupons
 * Rule listing search, pagination, and drag-and-drop sorting
@@ -584,6 +588,8 @@ You will be able to use plugin in your site, but however, you won't be able to r
 * Woocomerce discount plugin
 
 == Upgrade Notice ==
+= 5.1.1 =
+Security and stability update. Recommended for all users.
 = 5.1.0 =
 Includes coupon interaction options, listing improvements, and pricing display fixes.
 = 5.0.0 =

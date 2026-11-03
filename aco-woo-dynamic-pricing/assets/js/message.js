@@ -1,37 +1,64 @@
 // Deactivation Form
-jQuery(document).ready(function() { 
+jQuery(document).ready(function() {
+
+    var commentReasons = [ 'I found a bug', 'Plugin suddenly stopped working', 'Plugin broke my site', 'Other', 'Plugin doesn\'t meets my requirement' ];
+    var lastFocused = null;
+
+    function deactivateUrl() {
+        return document.querySelector('a#deactivate-aco-woo-dynamic-pricing').getAttribute('href');
+    }
+
+    function wdpOpen(trigger) {
+        let overlay = document.getElementById('wdp-survey-form-wrap');
+        lastFocused = trigger || document.activeElement;
+        overlay.classList.add('is-open');
+        document.body.classList.add('wdp-survey-open');
+        // Focus the dialog itself so keyboard users start inside it without pre-highlighting a reason.
+        document.getElementById('wdp-survey-form').focus();
+    }
 
     jQuery(document).on("click", function(e) {
-        let popup = document.getElementById('wdp-survey-form');
         let overlay = document.getElementById('wdp-survey-form-wrap');
-        let openButton = document.getElementById('deactivate-aco-woo-dynamic-pricing'); 
+        let openButton = document.getElementById('deactivate-aco-woo-dynamic-pricing');
+        if (!overlay) {
+            return;
+        }
         if(e.target.id == 'wdp-survey-form-wrap'){
             wdpClose();
         }
-        if(e.target === openButton){
+        if(openButton && e.target === openButton){
             e.preventDefault();
-            popup.style.display = 'block';
-            overlay.style.display = 'block';
+            wdpOpen(openButton);
         }
-        if(e.target.id == 'wdp_skip'){ 
+        if(e.target.id == 'wdp_skip'){
             e.preventDefault();
-            let urlRedirect = document.querySelector('a#deactivate-aco-woo-dynamic-pricing').getAttribute('href');
-            window.location = urlRedirect;
+            window.location = deactivateUrl();
         }
-        if(e.target.id == 'wdp_cancel'){ 
+        if(e.target.id == 'wdp_cancel' || jQuery(e.target).closest('#wdp_close').length){
             e.preventDefault();
             wdpClose();
         }
     });
 
-	function wdpClose() {
-		let popup = document.getElementById('wdp-survey-form');
+    jQuery(document).on('keydown', function(e) {
         let overlay = document.getElementById('wdp-survey-form-wrap');
-		popup.style.display = 'none';
-		overlay.style.display = 'none';
+        if (e.key === 'Escape' && overlay && overlay.classList.contains('is-open')) {
+            wdpClose();
+        }
+    });
+
+	function wdpClose() {
+        let overlay = document.getElementById('wdp-survey-form-wrap');
+		overlay.classList.remove('is-open');
+        document.body.classList.remove('wdp-survey-open');
 		jQuery('#wdp-survey-form form')[0].reset();
 		jQuery("#wdp-survey-form form .wdp-comments").hide();
+        jQuery('#wdp-survey-form .wdp-survey__reason').removeClass('is-selected');
+        jQuery('#wdp_deactivate').prop('disabled', false);
 		jQuery('#wdp-error').html('');
+        if (lastFocused && typeof lastFocused.focus === 'function') {
+            lastFocused.focus();
+        }
 	}
 
     jQuery("#wdp-survey-form form").on('submit', function(e) {
@@ -39,7 +66,7 @@ jQuery(document).ready(function() {
         jQuery('#wdp_deactivate').prop('disabled', true);
         let valid = wdpValidate();
 		if (valid) {
-            let urlRedirect = document.querySelector('a#deactivate-aco-woo-dynamic-pricing').getAttribute('href');
+            let urlRedirect = deactivateUrl();
             let form = jQuery(this);
             let serializeArray = form.serializeArray();
             let actionUrl = 'https://feedback.acowebs.com/plugin.php';
@@ -53,10 +80,17 @@ jQuery(document).ready(function() {
                 {
                     window.location = urlRedirect;
                 },
-                error: function (jqXHR, textStatus, errorThrown) { 
+                error: function (jqXHR, textStatus, errorThrown) {
                     window.location = urlRedirect;
                 }
             });
+        } else {
+            // Let the user fix the answer and submit again, and make sure they can see why.
+            jQuery('#wdp_deactivate').prop('disabled', false);
+            let errorEl = document.getElementById('wdp-error');
+            if (errorEl && errorEl.scrollIntoView) {
+                errorEl.scrollIntoView({ block: 'nearest' });
+            }
         }
     });
 
@@ -67,8 +101,15 @@ jQuery(document).ready(function() {
     jQuery("#wdp-survey-form form input[type='radio']").on('change', function(){
         wdpValidate();
         let val = jQuery(this).val();
-        if ( val == 'I found a bug' || val == 'Plugin suddenly stopped working' || val == 'Plugin broke my site' || val == 'Other' || val == 'Plugin doesn\'t meets my requirement' ) {
-            jQuery("#wdp-survey-form form .wdp-comments").show();
+        // Fallback for browsers without :has() support in the stylesheet.
+        jQuery('#wdp-survey-form .wdp-survey__reason').removeClass('is-selected');
+        jQuery(this).closest('.wdp-survey__reason').addClass('is-selected');
+        if ( commentReasons.indexOf(val) !== -1 ) {
+            let comments = jQuery("#wdp-survey-form form .wdp-comments").show();
+            // On small screens the comment box can open below the fold.
+            if (comments[0].scrollIntoView) {
+                comments[0].scrollIntoView({ block: 'nearest' });
+            }
         } else {
             jQuery("#wdp-survey-form form .wdp-comments").hide();
         }
@@ -80,9 +121,9 @@ jQuery(document).ready(function() {
 		if ( !reason ) {
 			error += 'Please select your reason for deactivation';
 		}
-		if ( error === '' && ( reason == 'I found a bug' || reason == 'Plugin suddenly stopped working' || reason == 'Plugin broke my site' || reason == 'Other' || reason == 'Plugin doesn\'t meets my requirement' ) ) {
+		if ( error === '' && commentReasons.indexOf(reason) !== -1 ) {
 			let comments = jQuery('#wdp-survey-form .wdp-comments textarea').val();
-			if (comments.length <= 0) {
+			if (comments.trim().length <= 0) {
 				error += 'Please specify';
 			}
 		}

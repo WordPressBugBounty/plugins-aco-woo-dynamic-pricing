@@ -198,13 +198,13 @@ class AWDP_Backend
     public function register_root_page()
     {
         $this->hook_suffix[] = add_menu_page(
-            __('Pricing Rules', 'aco-woo-dynamic-pricing'), __('Pricing Rules', 'aco-woo-dynamic-pricing'), 'edit_products', 'awdp_admin_ui', array($this, 'admin_ui'), esc_url($this->assets_url) . '/images/icon.png', 25);
+            __('Pricing Rules', 'aco-woo-dynamic-pricing'), __('Pricing Rules', 'aco-woo-dynamic-pricing'), awdp_free_manage_capability(), 'awdp_admin_ui', array($this, 'admin_ui'), esc_url($this->assets_url) . '/images/icon.png', 25);
         $this->hook_suffix[] = add_submenu_page(
-            'awdp_admin_ui', __('Product Lists', 'aco-woo-dynamic-pricing'), __('Product Lists', 'aco-woo-dynamic-pricing'), 'edit_products', 'awdp_admin_product_lists', array($this, 'admin_ui_pro_lists'));
+            'awdp_admin_ui', __('Product Lists', 'aco-woo-dynamic-pricing'), __('Product Lists', 'aco-woo-dynamic-pricing'), awdp_free_manage_capability(), 'awdp_admin_product_lists', array($this, 'admin_ui_pro_lists'));
         $this->hook_suffix[] = add_submenu_page(
-            'awdp_admin_ui', __('Settings', 'aco-woo-dynamic-pricing'), __('Settings', 'aco-woo-dynamic-pricing'), 'edit_products', 'awdp_ui_settings', array($this, 'admin_ui_settings'));
+            'awdp_admin_ui', __('Settings', 'aco-woo-dynamic-pricing'), __('Settings', 'aco-woo-dynamic-pricing'), awdp_free_manage_capability(), 'awdp_ui_settings', array($this, 'admin_ui_settings'));
         $this->hook_suffix[] = add_submenu_page(
-            'awdp_admin_ui', __('Help', 'aco-woo-dynamic-pricing'), __('Help', 'aco-woo-dynamic-pricing'), 'edit_products', 'awdp_ui_help', array($this, 'awdp_ui_help'));
+            'awdp_admin_ui', __('Help', 'aco-woo-dynamic-pricing'), __('Help', 'aco-woo-dynamic-pricing'), awdp_free_manage_capability(), 'awdp_ui_help', array($this, 'awdp_ui_help'));
     }
 
     public function admin_ui()
@@ -351,7 +351,7 @@ class AWDP_Backend
 
         // Deactivation JS
         if ( $screenID == 'plugins' ) {
-            wp_enqueue_script('awdp-deactivation-message', esc_url($this->assets_url).'js/message.js', array());
+            wp_enqueue_script('awdp-deactivation-message', esc_url($this->assets_url).'js/message.js', array('jquery'), AWDP_VERSION, true);
         }
 
     }
@@ -359,49 +359,125 @@ class AWDP_Backend
     // Deactivation Form
     public function wdp_deactivation_form() {
         $currentScreen = get_current_screen();
-        $screenID = $currentScreen->id;
-        if ( $screenID == 'plugins' ) {
-            $view = '<div id="wdp-survey-form-wrap"><div id="wdp-survey-form">
-            <p>If you have a moment, please let us know why you are deactivating this plugin. All submissions are anonymous and we only use this feedback for improving our plugin.</p>
-            <form method="POST">
-                <input name="Plugin" type="hidden" placeholder="Plugin" value="'.AWDP_TOKEN.'" required>
-                <input name="Version" type="hidden" placeholder="Version" value="'.AWDP_VERSION.'" required>
-                <input name="Date" type="hidden" placeholder="Date" value="'.date("m/d/Y").'" required>
-                <input name="Website" type="hidden" placeholder="Website" value="'.get_site_url().'" required>
-                <input name="Title" type="hidden" placeholder="Title" value="'.get_bloginfo( 'name' ).'" required>
-                <input type="radio" id="wdp_temporarily" name="Reason" value="I\'m only deactivating temporarily">
-                <label for="wdp_temporarily">I\'m only deactivating temporarily</label><br>
-                <input type="radio" id="wdp_notneeded" name="Reason" value="I no longer need the plugin">
-                <label for="wdp_notneeded">I no longer need the plugin</label><br>
-                <input type="radio" id="wdp_short" name="Reason" value="I only needed the plugin for a short period">
-                <label for="wdp_short">I only needed the plugin for a short period</label><br>
-                <input type="radio" id="wdp_better" name="Reason" value="I found a better plugin">
-                <label for="wdp_better">I found a better plugin</label><br>
-                <input type="radio" id="wdp_upgrade" name="Reason" value="Upgrading to PRO version">
-                <label for="wdp_upgrade">Upgrading to PRO version</label><br>
-                <input type="radio" id="wdp_requirement" name="Reason" value="Plugin doesn\'t meets my requirement">
-                <label for="wdp_requirement">Plugin doesn\'t meets my requirement</label><br>
-                <input type="radio" id="wdp_broke" name="Reason" value="Plugin broke my site">
-                <label for="wdp_broke">Plugin broke my site</label><br>
-                <input type="radio" id="wdp_stopped" name="Reason" value="Plugin suddenly stopped working">
-                <label for="wdp_stopped">Plugin suddenly stopped working</label><br>
-                <input type="radio" id="wdp_bug" name="Reason" value="I found a bug">
-                <label for="wdp_bug">I found a bug</label><br>
-                <input type="radio" id="wdp_other" name="Reason" value="Other">
-                <label for="wdp_other">Other</label><br>
-                <p id="wdp-error"></p>
-                <div class="wdp-comments" style="display:none;">
-                    <textarea type="text" name="Comments" placeholder="Please specify" rows="2"></textarea>
-                    <p>For support queries <a href="https://support.acowebs.com/portal/en/newticket?departmentId=361181000000006907&layoutId=361181000000074011" target="_blank">Submit Ticket</a></p>
+        if ( ! $currentScreen || $currentScreen->id !== 'plugins' ) {
+            return;
+        }
+
+        // Values are sent to the feedback service as-is; only the visible labels may change.
+        $reasons = array(
+            'wdp_temporarily' => array( "I'm only deactivating temporarily", __( "I'm only deactivating temporarily", 'aco-woo-dynamic-pricing' ) ),
+            'wdp_notneeded'   => array( 'I no longer need the plugin', __( 'I no longer need the plugin', 'aco-woo-dynamic-pricing' ) ),
+            'wdp_short'       => array( 'I only needed the plugin for a short period', __( 'I only needed it for a short period', 'aco-woo-dynamic-pricing' ) ),
+            'wdp_better'      => array( 'I found a better plugin', __( 'I found a better plugin', 'aco-woo-dynamic-pricing' ) ),
+            'wdp_upgrade'     => array( 'Upgrading to PRO version', __( 'Upgrading to the Pro version', 'aco-woo-dynamic-pricing' ) ),
+            'wdp_requirement' => array( "Plugin doesn't meets my requirement", __( "It doesn't meet my requirements", 'aco-woo-dynamic-pricing' ) ),
+            'wdp_broke'       => array( 'Plugin broke my site', __( 'The plugin broke my site', 'aco-woo-dynamic-pricing' ) ),
+            'wdp_stopped'     => array( 'Plugin suddenly stopped working', __( 'The plugin suddenly stopped working', 'aco-woo-dynamic-pricing' ) ),
+            'wdp_bug'         => array( 'I found a bug', __( 'I found a bug', 'aco-woo-dynamic-pricing' ) ),
+            'wdp_other'       => array( 'Other', __( 'Other', 'aco-woo-dynamic-pricing' ) ),
+        );
+        ?>
+        <div id="wdp-survey-form-wrap">
+            <div id="wdp-survey-form" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="wdp-survey-title" aria-describedby="wdp-survey-intro">
+                <div class="wdp-survey__header">
+                    <span class="wdp-survey__icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    </span>
+                    <div class="wdp-survey__heading">
+                        <h2 id="wdp-survey-title"><?php esc_html_e( 'Quick feedback', 'aco-woo-dynamic-pricing' ); ?></h2>
+                        <p id="wdp-survey-intro"><?php esc_html_e( 'If you have a moment, please let us know why you are deactivating this plugin. All submissions are anonymous and we only use this feedback for improving our plugin.', 'aco-woo-dynamic-pricing' ); ?></p>
+                    </div>
+                    <button type="button" class="wdp-survey__close" id="wdp_close" aria-label="<?php esc_attr_e( 'Close', 'aco-woo-dynamic-pricing' ); ?>">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    </button>
                 </div>
-                <button type="submit" class="wdp_button" id="wdp_deactivate">Submit & Deactivate</button>
-                <a href="#" class="wdp_button" id="wdp_cancel">Cancel</a>
-                <a href="#" class="wdp_button" id="wdp_skip">Skip & Deactivate</a>
-            </form></div></div>';
-            echo $view;
-        } ?>
+                <form method="POST">
+                    <input name="Plugin" type="hidden" placeholder="Plugin" value="<?php echo esc_attr( AWDP_TOKEN ); ?>" required>
+                    <input name="Version" type="hidden" placeholder="Version" value="<?php echo esc_attr( AWDP_VERSION ); ?>" required>
+                    <input name="Date" type="hidden" placeholder="Date" value="<?php echo esc_attr( date( 'm/d/Y' ) ); ?>" required>
+                    <input name="Website" type="hidden" placeholder="Website" value="<?php echo esc_url( get_site_url() ); ?>" required>
+                    <input name="Title" type="hidden" placeholder="Title" value="<?php echo esc_attr( get_bloginfo( 'name' ) ); ?>" required>
+                    <div class="wdp-survey__body">
+                        <div class="wdp-survey__reasons" role="radiogroup" aria-labelledby="wdp-survey-title">
+                            <?php foreach ( $reasons as $id => $reason ) : ?>
+                                <label class="wdp-survey__reason" for="<?php echo esc_attr( $id ); ?>">
+                                    <input type="radio" id="<?php echo esc_attr( $id ); ?>" name="Reason" value="<?php echo esc_attr( $reason[0] ); ?>">
+                                    <span><?php echo esc_html( $reason[1] ); ?></span>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                        <div class="wdp-comments" style="display:none;">
+                            <label class="screen-reader-text" for="wdp_comments"><?php esc_html_e( 'Please specify', 'aco-woo-dynamic-pricing' ); ?></label>
+                            <textarea id="wdp_comments" name="Comments" placeholder="<?php esc_attr_e( 'Please tell us a little more…', 'aco-woo-dynamic-pricing' ); ?>" rows="3"></textarea>
+                            <p class="wdp-survey__support"><?php esc_html_e( 'Need help instead?', 'aco-woo-dynamic-pricing' ); ?> <a href="https://support.acowebs.com/portal/en/newticket?departmentId=361181000000006907&amp;layoutId=361181000000074011" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Submit a support ticket', 'aco-woo-dynamic-pricing' ); ?></a></p>
+                        </div>
+                        <p id="wdp-error" role="alert"></p>
+                    </div>
+                    <div class="wdp-survey__footer">
+                        <a href="#" class="wdp_button wdp_button--link" id="wdp_skip"><?php esc_html_e( 'Skip & Deactivate', 'aco-woo-dynamic-pricing' ); ?></a>
+                        <div class="wdp-survey__actions">
+                            <a href="#" class="wdp_button wdp_button--secondary" id="wdp_cancel" role="button"><?php esc_html_e( 'Cancel', 'aco-woo-dynamic-pricing' ); ?></a>
+                            <button type="submit" class="wdp_button wdp_button--primary" id="wdp_deactivate"><?php esc_html_e( 'Submit & Deactivate', 'aco-woo-dynamic-pricing' ); ?></button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
         <style>
-            #wdp-survey-form-wrap{ display: none;position: absolute;top: 0px;bottom: 0px;left: 0px;right: 0px;z-index: 10000;background: rgb(0 0 0 / 63%); } #wdp-survey-form{ display:none;margin-top: 15px;position: fixed;text-align: left;width: 40%;max-width: 600px;z-index: 100;top: 50%;left: 50%;transform: translate(-50%, -50%);background: rgba(255,255,255,1);padding: 35px;border-radius: 6px;border: 2px solid #fff;font-size: 14px;line-height: 24px;outline: none;}#wdp-survey-form p{font-size: 14px;line-height: 24px;padding-bottom:20px;margin: 0;} #wdp-survey-form .wdp_button { margin: 25px 5px 10px 0px; height: 42px;border-radius: 6px;background-color: #1eb5ff;border: none;padding: 0 36px;color: #fff;outline: none;cursor: pointer;font-size: 15px;font-weight: 600;letter-spacing: 0.1px;color: #ffffff;margin-left: 0 !important;position: relative;display: inline-block;text-decoration: none;line-height: 42px;} #wdp-survey-form .wdp_button#wdp_deactivate{background: #fff;border: solid 1px rgba(88,115,149,0.5);color: #a3b2c5;} .wdp_button#wdp_deactivate:disabled{opacity: .5; cursor: not-allowed;} #wdp-survey-form .wdp_button#wdp_skip{background: #fff;border: none;color: #a3b2c5;padding: 0px 15px;float:right;}#wdp-survey-form .wdp-comments{position: relative;}#wdp-survey-form .wdp-comments p{ position: absolute; top: -24px; right: 0px; font-size: 14px; padding: 0px; margin: 0px;} #wdp-survey-form .wdp-comments p a{text-decoration:none;}#wdp-survey-form .wdp-comments textarea{background: #fff;border: solid 1px rgba(88,115,149,0.5);width: 100%;line-height: 30px;resize:none;margin: 10px 0 0 0;} #wdp-survey-form p#wdp-error{margin-top: 10px;padding: 0px;font-size: 13px;color: #ea6464;}
+            #wdp-survey-form-wrap { --wdp-primary: #4f46e5; --wdp-primary-hover: #4338ca; --wdp-primary-light: #eef2ff; --wdp-text: #0f172a; --wdp-text-secondary: #475569; --wdp-text-muted: #64748b; --wdp-border: #e2e8f0; --wdp-border-light: #f1f5f9; --wdp-danger: #dc2626; --wdp-focus-ring: 0 0 0 3px rgba(79, 70, 229, 0.35); display: none; position: fixed; inset: 0; z-index: 100000; align-items: center; justify-content: center; padding: 16px; background: rgba(15, 23, 42, 0.55); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; }
+            #wdp-survey-form-wrap.is-open { display: flex; animation: wdp-survey-fade 150ms ease-out; }
+            #wdp-survey-form { display: flex; flex-direction: column; width: 100%; max-width: 600px; max-height: calc(100vh - 32px); background: #fff; border-radius: 14px; box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25); color: var(--wdp-text); text-align: left; overflow: hidden; outline: none; animation: wdp-survey-rise 180ms ease-out; }
+            #wdp-survey-form * { box-sizing: border-box; }
+            #wdp-survey-form form { display: flex; flex-direction: column; min-height: 0; margin: 0; }
+            .wdp-survey__header { display: flex; align-items: flex-start; gap: 14px; padding: 24px 24px 16px; }
+            .wdp-survey__icon { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 10px; background: var(--wdp-primary-light); color: var(--wdp-primary); }
+            .wdp-survey__heading { flex: 1 1 auto; min-width: 0; }
+            #wdp-survey-form .wdp-survey__heading h2 { margin: 0 0 4px; padding: 0; font-size: 17px; line-height: 1.4; font-weight: 600; color: var(--wdp-text); }
+            #wdp-survey-form .wdp-survey__heading p { margin: 0; padding: 0; font-size: 13px; line-height: 1.6; color: var(--wdp-text-secondary); }
+            .wdp-survey__close { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; margin: -4px -6px 0 0; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--wdp-text-muted); cursor: pointer; transition: background 150ms ease, color 150ms ease; }
+            .wdp-survey__close:hover { background: var(--wdp-border-light); color: var(--wdp-text); }
+            .wdp-survey__close:focus-visible { outline: none; box-shadow: var(--wdp-focus-ring); }
+            .wdp-survey__body { padding: 4px 24px 8px; overflow-y: auto; }
+            .wdp-survey__reasons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+            #wdp-survey-form .wdp-survey__reason { display: flex; align-items: center; gap: 10px; min-height: 44px; margin: 0; padding: 10px 12px; border: 1px solid var(--wdp-border); border-radius: 8px; background: #fff; font-size: 13px; line-height: 1.4; color: var(--wdp-text); cursor: pointer; transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease; }
+            #wdp-survey-form .wdp-survey__reason:hover { border-color: #cbd5e1; background: #f8fafc; }
+            #wdp-survey-form .wdp-survey__reason.is-selected, #wdp-survey-form .wdp-survey__reason:has(input:checked) { border-color: var(--wdp-primary); background: var(--wdp-primary-light); box-shadow: inset 0 0 0 1px var(--wdp-primary); }
+            #wdp-survey-form .wdp-survey__reason:has(input:focus-visible) { box-shadow: var(--wdp-focus-ring); }
+            #wdp-survey-form .wdp-survey__reason input[type="radio"] { flex: 0 0 auto; margin: 0; accent-color: var(--wdp-primary); }
+            #wdp-survey-form .wdp-survey__reason input[type="radio"]:focus { box-shadow: none; outline: none; }
+            #wdp-survey-form .wdp-comments { margin-top: 14px; }
+            #wdp-survey-form .wdp-comments textarea { display: block; width: 100%; min-height: 76px; margin: 0; padding: 10px 12px; border: 1px solid var(--wdp-border); border-radius: 8px; font-family: inherit; font-size: 13px; line-height: 1.5; color: var(--wdp-text); background: #fff; resize: vertical; box-shadow: none; }
+            #wdp-survey-form .wdp-comments textarea:focus { border-color: var(--wdp-primary); box-shadow: var(--wdp-focus-ring); outline: none; }
+            #wdp-survey-form .wdp-survey__support { margin: 8px 0 0; padding: 0; font-size: 12px; line-height: 1.5; color: var(--wdp-text-muted); }
+            #wdp-survey-form .wdp-survey__support a { color: var(--wdp-primary); font-weight: 500; text-decoration: none; }
+            #wdp-survey-form .wdp-survey__support a:hover { text-decoration: underline; }
+            #wdp-survey-form p#wdp-error { margin: 10px 0 0; padding: 0; font-size: 13px; line-height: 1.5; color: var(--wdp-danger); }
+            #wdp-survey-form p#wdp-error:empty { display: none; }
+            .wdp-survey__footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 24px; margin-top: 12px; border-top: 1px solid var(--wdp-border-light); background: #f8fafc; }
+            .wdp-survey__actions { display: flex; align-items: center; gap: 8px; }
+            #wdp-survey-form .wdp_button { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; margin: 0; padding: 9px 18px; border: 1px solid transparent; border-radius: 6px; font-family: inherit; font-size: 13px; font-weight: 500; line-height: 1.4; text-decoration: none; white-space: nowrap; cursor: pointer; box-shadow: none; transition: background 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease; }
+            #wdp-survey-form .wdp_button:focus-visible { outline: none; box-shadow: var(--wdp-focus-ring); }
+            #wdp-survey-form .wdp_button--primary { background: var(--wdp-primary); border-color: var(--wdp-primary); color: #fff; }
+            #wdp-survey-form .wdp_button--primary:hover:not(:disabled) { background: var(--wdp-primary-hover); border-color: var(--wdp-primary-hover); color: #fff; }
+            #wdp-survey-form .wdp_button--primary:disabled { opacity: 0.55; cursor: not-allowed; }
+            #wdp-survey-form .wdp_button--secondary { background: #fff; border-color: var(--wdp-border); color: var(--wdp-text-secondary); }
+            #wdp-survey-form .wdp_button--secondary:hover { background: var(--wdp-border-light); border-color: #cbd5e1; color: var(--wdp-text); }
+            #wdp-survey-form .wdp_button--link { padding-left: 4px; padding-right: 4px; background: transparent; color: var(--wdp-text-muted); }
+            #wdp-survey-form .wdp_button--link:hover { color: var(--wdp-text); text-decoration: underline; }
+            body.wdp-survey-open { overflow: hidden; }
+            @keyframes wdp-survey-fade { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes wdp-survey-rise { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+            @media (prefers-reduced-motion: reduce) { #wdp-survey-form-wrap.is-open, #wdp-survey-form { animation: none; } }
+            @media (max-width: 600px) {
+                #wdp-survey-form-wrap { align-items: flex-end; padding: 0; }
+                #wdp-survey-form { max-width: none; max-height: 92vh; border-radius: 14px 14px 0 0; }
+                .wdp-survey__header { padding: 20px 16px 12px; }
+                .wdp-survey__body { padding: 4px 16px 8px; }
+                .wdp-survey__reasons { grid-template-columns: 1fr; }
+                .wdp-survey__footer { flex-direction: column-reverse; align-items: stretch; padding: 12px 16px 16px; }
+                .wdp-survey__actions { flex-direction: column-reverse; align-items: stretch; }
+                #wdp-survey-form .wdp_button { width: 100%; min-height: 44px; }
+            }
         </style>
     <?php }
 

@@ -10,7 +10,8 @@ class AWDP_Discount_Coupon extends AWDP_Discount_Module
 {
 
     /**
-     * Builds the coupon discount total from cart-level rules only (excludes line-price product discounts).
+     * Builds the coupon discount total from coupon-type rules and line-price entries
+     * that fell back to the virtual coupon when set_price() did not stick.
      */
     protected function get_cart_coupon_discount_total()
     {
@@ -176,7 +177,7 @@ class AWDP_Discount_Coupon extends AWDP_Discount_Module
             $coupon_label = $this->owner->couponLabel;
             $code = $coupon->get_code();
             if ($code == $coupon_label || mb_strtolower($code, 'UTF-8') == mb_strtolower($coupon_label, 'UTF-8')) {
-                return ucfirst($coupon_label);
+                return esc_html( ucfirst($coupon_label) );
             }
         }
         return $label;
@@ -264,19 +265,19 @@ class AWDP_Discount_Coupon extends AWDP_Discount_Module
             $total          = $woocommerce->cart->get_totals();
             if ( $coupons_amount ) { 
                 $result = '<p class="wdp_miniCart total">';
-                $result .= '<span class="wdpLabel">'.$coupon.': </span><span class="woocommerce-Price-amount amount">'.wc_price($coupons_amount).'</span></br>';
+                $result .= '<span class="wdpLabel">'.esc_html($coupon).': </span><span class="woocommerce-Price-amount amount">'.wc_price($coupons_amount).'</span></br>';
                 $result .= ( $shipping && ( strpos ( $shipping, __('Free', 'aco-woo-dynamic-pricing') ) === false) ) ? '<span class="wdpLabel">'.__("Shipping", "aco-woo-dynamic-pricing").': </span><span class="woocommerce-Price-amount amount">'.$shipping.'</span></br>' : '';
                 if ($taxes) {
                     if($tax_total_display == 'single') {
                         $single_tax = 0;
-                        foreach ($taxes as $key => $val) { 
-                            $single_tax += $val->amount; 
+                        foreach ($taxes as $key => $val) {
+                            $single_tax += $val->amount;
                         }
                         $tax_label = isset($taxes[array_key_first($taxes)]->label) ? $taxes[array_key_first($taxes)]->label : 'Tax';
-                        $result .= '<span class="wdpLabel">'.$tax_label.': </span><span class="woocommerce-Price-amount amount">'.wc_price($single_tax).'</span></br>';
+                        $result .= '<span class="wdpLabel">'.esc_html($tax_label).': </span><span class="woocommerce-Price-amount amount">'.wc_price($single_tax).'</span></br>';
                     } else {
-                        foreach ($taxes as $key => $val) { 
-                            $result .= '<span class="wdpLabel">'.$val->label.': </span><span class="woocommerce-Price-amount amount">'.wc_price($val->amount).'</span></br>';
+                        foreach ($taxes as $key => $val) {
+                            $result .= '<span class="wdpLabel">'.esc_html($val->label).': </span><span class="woocommerce-Price-amount amount">'.wc_price($val->amount).'</span></br>';
                         }
                     }
                 }

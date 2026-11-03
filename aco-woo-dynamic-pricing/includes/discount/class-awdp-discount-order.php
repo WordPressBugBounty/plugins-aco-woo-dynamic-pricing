@@ -338,4 +338,281 @@ class AWDP_Discount_Order extends AWDP_Discount_Module
 
     }
 
+
+    /**
+     * Thank-you page, My Account and emails: line subtotal as original (struck through) vs paid.
+     *
+     * Display only; reads the pre-discount unit stored at checkout.
+     *
+     * @param string                $subtotal Existing HTML.
+     * @param WC_Order_Item_Product $item     Order line item.
+     * @param WC_Order              $order    Order.
+     * @return string
+     */
+    public function format_order_line_subtotal_html($subtotal, $item, $order)
+    {
+        if (!is_a($item, 'WC_Order_Item_Product')) {
+            return $subtotal;
+        }
+
+        $original_unit = $this->get_order_item_original_unit($item);
+        if ($original_unit === null) {
+            return $subtotal;
+        }
+
+        if (!is_a($order, 'WC_Abstract_Order')) {
+            $order = $item->get_order();
+            if (!is_a($order, 'WC_Abstract_Order')) {
+                return $subtotal;
+            }
+        }
+
+        $product      = $item->get_product();
+        $regular      = $product ? $product->get_regular_price('edit') : '';
+        $display_unit = awdp_resolve_strikeout_original($original_unit, $regular, awdp_use_regular_as_strikeout());
+        $qty          = max(1, (float) $item->get_quantity());
+        $incl_tax     = 'incl' === get_option('woocommerce_tax_display_cart');
+
+        // Same basis as WooCommerce's own line subtotal: ex tax, plus line tax when shown incl.
+        $original_line   = $this->get_order_item_amount_excluding_tax($item, $order, $display_unit * $qty);
+        $discounted_line = (float) $item->get_subtotal();
+        if ($incl_tax) {
+            $original_line  += $this->get_order_item_tax_for_amount($item, $original_line);
+            $discounted_line = (float) $order->get_line_subtotal($item, true);
+        }
+
+        if ($original_line <= $discounted_line + $this->price_epsilon()) {
+            return $subtotal;
+        }
+
+        $currency = array('currency' => $order->get_currency());
+        $html     = wc_format_sale_price(wc_price($original_line, $currency), wc_price($discounted_line, $currency));
+        if (!$incl_tax && $order->get_prices_include_tax()) {
+            $html .= ' <small class="woocommerce-Price-taxLabel tax_label">' . WC()->countries->ex_tax_or_vat() . '</small>';
+        }
+
+        return $html;
+    }
+
+
+    /**
+     * Order totals (thank-you page, My Account, emails): show product-rule savings as a Discount row.
+     *
+     * Product rules lower the line price, so WooCommerce records no discount for them. Subtotal is
+     * restated at the pre-discount price so Subtotal - Discount + Tax = Total. Savings from the
+     * virtual coupon are already in WooCommerce's own discount row and are added to, not repeated.
+     *
+     * @param array             $total_rows  Rows from WC_Order::get_order_item_totals().
+     * @param WC_Abstract_Order $order       Order.
+     * @param string            $tax_display 'excl' or 'incl'.
+     * @return array
+     */
+    public function filter_order_item_totals($total_rows, $order, $tax_display = '')
+    {
+        if (!is_array($total_rows) || !isset($total_rows['cart_subtotal']) || !is_a($order, 'WC_Order')) {
+            return $total_rows;
+        }
+
+        if (!apply_filters('awdp_order_totals_show_discount', true, $order)) {
+            return $total_rows;
+        }
+
+        $tax_display = $tax_display ? $tax_display : get_option('woocommerce_tax_display_cart');
+        $incl_tax    = 'incl' === $tax_display;
+        $saving      = $this->get_order_line_price_saving($order);
+        $amount      = $incl_tax ? $saving['excl'] + $saving['tax'] : $saving['excl'];
+        $amount      = (float) apply_filters('awdp_order_totals_discount_amount', $amount, $order, $tax_display);
+
+        if ($amount <= $this->price_epsilon()) {
+            return $total_rows;
+        }
+
+        $currency = array('currency' => $order->get_currency());
+
+        // Subtotal as WooCommerce builds it (WC_Order::get_subtotal_to_display), plus the saving.
+        $subtotal = (float) $order->get_subtotal();
+        if ($incl_tax) {
+            $subtotal_taxes = 0;
+            foreach ($order->get_items() as $item) {
+                $line_tax        = (float) $item->get_subtotal_tax();
+                $subtotal_taxes += 'yes' === get_option('woocommerce_tax_round_at_subtotal') ? $line_tax : wc_round_tax_total($line_tax);
+            }
+            $subtotal += wc_round_tax_total($subtotal_taxes);
+        }
+        $subtotal_html = wc_price($subtotal + $amount, $currency);
+        if (!$incl_tax && $order->get_prices_include_tax() && wc_tax_enabled()) {
+            $subtotal_html .= ' <small class="tax_label">' . WC()->countries->ex_tax_or_vat() . '</small>';
+        }
+        $total_rows['cart_subtotal']['value'] = apply_filters('woocommerce_order_subtotal_to_display', $subtotal_html, false, $order);
+
+        $discount      = $amount + (isset($total_rows['discount']) ? (float) $order->get_total_discount(!$incl_tax) : 0);
+        $discount_html = '-' . apply_filters('woocommerce_order_discount_to_display', wc_price($discount, $currency), $order);
+
+        if (isset($total_rows['discount'])) {
+            $total_rows['discount']['value'] = $discount_html;
+            return $total_rows;
+        }
+
+        $rows = array();
+        foreach ($total_rows as $key => $row) {
+            $rows[$key] = $row;
+            if ('cart_subtotal' === $key) {
+                $rows['discount'] = array(
+                    'type'  => 'discount',
+                    'label' => __('Discount:', 'woocommerce'),
+                    'value' => $discount_html,
+                );
+            }
+        }
+
+        return $rows;
+    }
+
+
+    /**
+     * Saving from product rules that lowered order line prices.
+     *
+     * Only lines with a stored pre-discount unit count. Lines that fell back to the virtual
+     * coupon were charged at that unit, so they add nothing here (the coupon row covers them).
+     *
+     * @param WC_Abstract_Order $order Order.
+     * @return array { excl: float, tax: float }
+     */
+    public function get_order_line_price_saving($order)
+    {
+        $saving = array('excl' => 0.0, 'tax' => 0.0);
+
+        foreach ($order->get_items('line_item') as $item) {
+            if (!is_a($item, 'WC_Order_Item_Product')) {
+                continue;
+            }
+
+            $original = $this->get_order_item_original_unit($item);
+            $qty      = (float) $item->get_quantity();
+            if ($original === null || $original <= 0 || $qty <= 0) {
+                continue;
+            }
+
+            $original_line = $this->get_order_item_amount_excluding_tax($item, $order, $original * $qty);
+            $line_saving   = $original_line - (float) $item->get_subtotal();
+            if ($line_saving <= $this->price_epsilon()) {
+                continue;
+            }
+
+            $saving['excl'] += $line_saving;
+            $saving['tax']  += $this->get_order_item_tax_for_amount($item, $line_saving);
+        }
+
+        return $saving;
+    }
+
+
+    /**
+     * Pre-discount unit price stored on the line at checkout (catalog price basis).
+     *
+     * @param WC_Order_Item_Product $item Order line item.
+     * @return float|null
+     */
+    protected function get_order_item_original_unit($item)
+    {
+        $original = $item->get_meta('_awdp_original_unit_price', true);
+
+        return ($original !== '' && is_numeric($original)) ? (float) $original : null;
+    }
+
+
+    /**
+     * A catalog-basis amount for an order line without tax.
+     *
+     * Mirrors WC_Cart_Totals: with prices entered incl tax, the shop's base tax is removed
+     * (or the line's own rates when woocommerce_adjust_non_base_location_prices is off).
+     *
+     * @param WC_Order_Item_Product $item   Order line item.
+     * @param WC_Abstract_Order     $order  Order.
+     * @param float                 $amount Amount in the catalog price basis.
+     * @return float
+     */
+    protected function get_order_item_amount_excluding_tax($item, $order, $amount)
+    {
+        $amount = (float) $amount;
+        if ($amount <= 0 || !$order->get_prices_include_tax() || !wc_tax_enabled()) {
+            return $amount;
+        }
+
+        $product = $item->get_product();
+        $taxable = $product ? $product->is_taxable() : !empty($this->get_order_item_tax_rates($item));
+        if (!$taxable) {
+            return $amount;
+        }
+
+        $rates = apply_filters('woocommerce_adjust_non_base_location_prices', true)
+            ? WC_Tax::get_base_tax_rates($item->get_tax_class())
+            : $this->get_order_item_tax_rates($item);
+
+        return $amount - array_sum(WC_Tax::calc_tax($amount, $rates, true));
+    }
+
+
+    /**
+     * Tax the order line would charge on an ex-tax amount.
+     *
+     * @param WC_Order_Item_Product $item   Order line item.
+     * @param float                 $amount Amount excluding tax.
+     * @return float
+     */
+    protected function get_order_item_tax_for_amount($item, $amount)
+    {
+        $subtotal = (float) $item->get_subtotal();
+        if ($subtotal > 0) {
+            return (float) $amount * (float) $item->get_subtotal_tax() / $subtotal;
+        }
+
+        // Fully free line: no ratio to use, so apply the rates it was taxed with.
+        $rates = $this->get_order_item_tax_rates($item);
+
+        return $rates ? (float) array_sum(WC_Tax::calc_tax((float) $amount, $rates, false)) : 0.0;
+    }
+
+
+    /**
+     * Tax rates applied to an order line, in WC_Tax::calc_tax() format.
+     *
+     * @param WC_Order_Item_Product $item Order line item.
+     * @return array
+     */
+    protected function get_order_item_tax_rates($item)
+    {
+        $taxes = $item->get_taxes();
+        if (empty($taxes['subtotal']) || !is_array($taxes['subtotal'])) {
+            return array();
+        }
+
+        $rates = array();
+        foreach (array_keys($taxes['subtotal']) as $rate_id) {
+            $rate = WC_Tax::_get_tax_rate($rate_id);
+            if (empty($rate) || !isset($rate['tax_rate'])) {
+                continue;
+            }
+            $rates[$rate_id] = array(
+                'rate'     => (float) $rate['tax_rate'],
+                'label'    => isset($rate['tax_rate_name']) ? $rate['tax_rate_name'] : '',
+                'shipping' => !empty($rate['tax_rate_shipping']) ? 'yes' : 'no',
+                'compound' => !empty($rate['tax_rate_compound']) ? 'yes' : 'no',
+            );
+        }
+
+        return $rates;
+    }
+
+
+    /**
+     * Smallest amount the store's currency can show.
+     *
+     * @return float
+     */
+    protected function price_epsilon()
+    {
+        return pow(10, -(int) wc_get_price_decimals());
+    }
+
 }

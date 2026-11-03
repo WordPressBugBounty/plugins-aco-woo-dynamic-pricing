@@ -94,6 +94,14 @@ class AWDP_viewPricingTable {
                 $discount_item_description  = get_option('awdp_discount_item_description') ? get_option('awdp_discount_item_description') : '';
             }
             /* End WPML */
+            // Admin-entered texts are only used inside the table markup.
+            $awdp_pc_title              = esc_html( $awdp_pc_title );
+            $awdp_pc_label              = esc_html( $awdp_pc_label );
+            $awdp_qn_label              = esc_html( $awdp_qn_label );
+            $awdp_nw_label              = esc_html( $awdp_nw_label );
+            $value_display_text         = esc_html( $value_display_text );
+            $discount_description       = wp_kses_post( $discount_description );
+            $discount_item_description  = wp_kses_post( $discount_item_description );
 
             // Pricing table texts
             $prcn_text      = ( !$value_display_text_hide ) ? ( ( ( $value_display == 'discount_value' || $value_display == 'discount_both' ) && $value_display_text ) ? ' '.$value_display_text : __('% OFF', 'aco-woo-dynamic-pricing') ) : '';

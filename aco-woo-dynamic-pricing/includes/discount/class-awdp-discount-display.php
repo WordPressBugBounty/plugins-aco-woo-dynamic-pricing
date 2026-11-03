@@ -240,7 +240,7 @@ class AWDP_Discount_Display extends AWDP_Discount_Module
                 $customStyle           .= $offer_border_color ? 'border-color: '.$offer_border_color.';' : ''; 
                 $customStyle           .= ( $border_top_width || $border_right_width || $border_bottom_width || $border_left_width ) ? 'border-width: '.$border_top_width.$border_right_width.$border_bottom_width.$border_left_width.';' : ''; 
 
-                $result                 = '<div class="awdpOfferMsg" style="display:none;"><div style="'.$customStyle.'">'.$offer_desc.'</div></div>';
+                $result                 = '<div class="awdpOfferMsg" style="display:none;"><div style="'.esc_attr( $customStyle ).'">'.wp_kses_post( $offer_desc ).'</div></div>';
 
             // }
 
@@ -344,8 +344,9 @@ class AWDP_Discount_Display extends AWDP_Discount_Module
             $customStyle .= $custom_message_position ? 'text-align: ' . $custom_message_position . ';' : '';
             $customStyle .= ( $custom_message_border_top_width || $custom_message_border_right_width || $custom_message_border_bottom_width || $custom_message_border_left_width ) ? 'border-width: ' . $custom_message_border_top_width . $custom_message_border_right_width . $custom_message_border_bottom_width . $custom_message_border_left_width . ';' : '';
 
-            $message = $custom_message ? str_replace( '[discount]', wc_price( $coupons_amount ), $custom_message ) : __( "You've saved ", 'aco-woo-dynamic-pricing' ) . wc_price( $coupons_amount ) . __( ' on this order', 'aco-woo-dynamic-pricing' );
-            $result  = '<div class="wdp_save_text" style="' . $customStyle . '">' . nl2br( $message ) . '</div>';
+            // Filter the saved message before inserting wc_price(), whose markup wp_kses_post() would strip.
+            $message = $custom_message ? str_replace( '[discount]', wc_price( $coupons_amount ), wp_kses_post( $custom_message ) ) : esc_html__( "You've saved ", 'aco-woo-dynamic-pricing' ) . wc_price( $coupons_amount ) . esc_html__( ' on this order', 'aco-woo-dynamic-pricing' );
+            $result  = '<div class="wdp_save_text" style="' . esc_attr( $customStyle ) . '">' . nl2br( $message ) . '</div>';
             echo $result;
         }
 
@@ -447,7 +448,12 @@ class AWDP_Discount_Display extends AWDP_Discount_Module
             $awdp_qn_label              = get_option('awdp_qn_label') ? get_option('awdp_qn_label') : __("Quantity", "aco-woo-dynamic-pricing");
             $awdp_nw_label              = get_option('awdp_new_label') ? get_option('awdp_new_label') : __("Price", "aco-woo-dynamic-pricing");
         }
-        if ( $type === 'change' ) { 
+        // Labels are only used inside the table markup.
+        $awdp_pc_title  = esc_html( $awdp_pc_title );
+        $awdp_pc_label  = esc_html( $awdp_pc_label );
+        $awdp_qn_label  = esc_html( $awdp_qn_label );
+        $awdp_nw_label  = esc_html( $awdp_nw_label );
+        if ( $type === 'change' ) {
 
             if ( $DisData ) {
 
@@ -473,6 +479,7 @@ class AWDP_Discount_Display extends AWDP_Discount_Module
                 } else  {
                     $value_display_text         = get_option('awdp_table_value_text') ? get_option('awdp_table_value_text') : '';
                 }
+                $value_display_text = esc_html( $value_display_text );
 
                 // Pricing table texts
                 $prcn_text      = ( !$value_display_text_hide ) ? ( ( ( $value_display == 'discount_value' || $value_display == 'discount_both' ) && $value_display_text ) ? ' '.$value_display_text : __('% OFF', 'aco-woo-dynamic-pricing') ) : '';

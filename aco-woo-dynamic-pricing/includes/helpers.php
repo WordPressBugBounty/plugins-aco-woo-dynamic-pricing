@@ -61,42 +61,28 @@ if ( !function_exists('awdp_dynamic_value') ) {
 
                 if ( !empty($val['rules']) && is_array($val['rules']) && count($val['rules']) ) {
 
-                    $evel_str = '';
+                    $row_results   = [];
+                    $row_operators = [];
 
-                    $val_rules  = array_values ( array_filter( $val['rules'] ) ); 
-                    $dynmcDisc  = array_key_exists ( 'discount', $val ) ? $val['discount'] : ''; 
+                    $val_rules  = array_values ( array_filter( $val['rules'] ) );
+                    $dynmcDisc  = array_key_exists ( 'discount', $val ) ? $val['discount'] : '';
 
                     if ( !$dynmcDisc ) continue;
                     $allowed_operators = ['AND', 'OR', ''];
-                   
-                    foreach ( $val_rules as $rul ) { 
 
-                        $evel_str .= '(';
+                    foreach ( $val_rules as $rul ) {
 
                         if ( $rul['rule']['value'] != '' ) {
-                            if ( awdp_combinations ( $rul, $item, $list_id, $product_lists, $wdp_cart_totals, $wdp_cart_items, $wdp_cart_quantity, $wdp_cart_totals_pl, $wdp_cart_items_pl, $wdp_cart_quantity_pl ) ) { 
-                                $evel_str .= ' true ';
-                            } else { 
-                                $evel_str .= ' false ';
-                            }
+                            $row_results[] = (bool) awdp_combinations ( $rul, $item, $list_id, $product_lists, $wdp_cart_totals, $wdp_cart_items, $wdp_cart_quantity, $wdp_cart_totals_pl, $wdp_cart_items_pl, $wdp_cart_quantity_pl );
                         } else {
-                            $evel_str .= ' true ';
+                            $row_results[] = true;
                         }
-                        $operator = (isset($rul['operator']) && in_array($rul['operator'], $allowed_operators, true)) ? $rul['operator'] :
-                    '';
-                        $evel_str .= ') ' . (($operator !== false) ? $operator : '') . ' ';
+                        $row_operators[] = (isset($rul['operator']) && in_array($rul['operator'], $allowed_operators, true)) ? $rul['operator'] : '';
 
-                        
                     }
 
-                    if ( count($val['rules']) > 0 && !empty($val['rules']) ) {
-                        preg_match_all('/\(.*\)/', $evel_str, $match);
-                        $evel_str = $match[0][0] . ' ';
-                    }
-
-                    $evel_str = str_replace(['and', 'or'], ['&&', '||'], strtolower($evel_str));
-
-                    if ( eval ( 'return ' . $evel_str . ';' ) ) {
+                    // A group with no usable conditions never selects its discount.
+                    if ( !empty( $row_results ) && awdp_free_evaluate_condition_chain( $row_results, $row_operators ) ) {
 
                         return $dynmcDisc;
 
@@ -841,6 +827,19 @@ if ( ! function_exists( 'awdp_store_api_format_money' ) ) {
 }
 
 /**
+ * Whether cart/checkout prices are displayed including tax (cart setting, not shop).
+ *
+ * @return bool
+ */
+if ( ! function_exists( 'awdp_cart_display_prices_including_tax' ) ) {
+	function awdp_cart_display_prices_including_tax() {
+		return ( function_exists( 'WC' ) && WC()->cart )
+			? (bool) WC()->cart->display_prices_including_tax()
+			: ( get_option( 'woocommerce_tax_display_cart' ) === 'incl' );
+	}
+}
+
+/**
  * Cart/checkout display amount using WooCommerce cart tax display (not shop).
  *
  * @param WC_Product       $product Product or variation on the cart line.
@@ -865,14 +864,202 @@ if ( ! function_exists( 'awdp_get_cart_tax_display_amount' ) ) {
 			'qty'   => $qty,
 		);
 
-		$incl = ( function_exists( 'WC' ) && WC()->cart )
-			? WC()->cart->display_prices_including_tax()
-			: ( get_option( 'woocommerce_tax_display_cart' ) === 'incl' );
-
-		if ( $incl ) {
+		if ( awdp_cart_display_prices_including_tax() ) {
 			return (float) wc_get_price_including_tax( $product, $args );
 		}
 
 		return (float) wc_get_price_excluding_tax( $product, $args );
+	}
+}
+
+/**
+ * Replace the default HTML a filter started from with AWDP's version, keeping
+ * anything earlier callbacks wrapped around or appended to it.
+ *
+ * @param string $prior_html   HTML received by the filter.
+ * @param string $default_html HTML WooCommerce passed into the filter chain.
+ * @param string $new_html     AWDP replacement for $default_html.
+ * @return string|null Merged HTML, or null when $default_html is not found in $prior_html.
+ */
+if ( ! function_exists( 'awdp_replace_html_fragment' ) ) {
+	function awdp_replace_html_fragment( $prior_html, $default_html, $new_html ) {
+		$prior_html   = (string) $prior_html;
+		$default_html = (string) $default_html;
+
+		if ( '' === $default_html ) {
+			return null;
+		}
+
+		$pos = strpos( $prior_html, $default_html );
+		if ( false === $pos ) {
+			return null;
+		}
+
+		return substr_replace( $prior_html, (string) $new_html, $pos, strlen( $default_html ) );
+	}
+}
+
+/**
+ * Evaluate condition results joined by AND / OR the same way the rule engine
+ * historically did through eval(): AND binds tighter than OR, and an empty or
+ * unknown operator counts as AND. Each operator joins its value to the next
+ * one, so the last operator is ignored.
+ *
+ * @param bool[]   $values    Condition results, in order.
+ * @param string[] $operators Operator following each value ('AND', 'OR' or '').
+ * @return bool True when there is nothing to evaluate.
+ */
+if ( ! function_exists( 'awdp_free_evaluate_condition_chain' ) ) {
+	function awdp_free_evaluate_condition_chain( array $values, array $operators ) {
+		$values    = array_values( $values );
+		$operators = array_values( $operators );
+		$count     = count( $values );
+
+		if ( 0 === $count ) {
+			return true;
+		}
+
+		$result  = false;
+		$and_run = true;
+		foreach ( $values as $index => $value ) {
+			$and_run = $and_run && (bool) $value;
+
+			$is_last  = ( $index === $count - 1 );
+			$operator = isset( $operators[ $index ] ) ? $operators[ $index ] : '';
+			if ( $is_last || 'OR' === $operator ) {
+				$result  = $result || $and_run;
+				$and_run = true;
+			}
+		}
+
+		return $result;
+	}
+}
+
+/**
+ * Capability required to manage pricing rules and settings (admin menu and REST API).
+ *
+ * @return string
+ */
+if ( ! function_exists( 'awdp_free_manage_capability' ) ) {
+	function awdp_free_manage_capability() {
+		return apply_filters( 'awdp_free_manage_capability', 'manage_woocommerce' );
+	}
+}
+
+/**
+ * Whether an ID belongs to one of this plugin's post types.
+ *
+ * @param mixed    $id    Post ID.
+ * @param string[] $types Allowed post types.
+ * @return bool
+ */
+if ( ! function_exists( 'awdp_free_is_own_post' ) ) {
+	function awdp_free_is_own_post( $id, array $types ) {
+		$id = absint( $id );
+		return $id > 0 && in_array( get_post_type( $id ), $types, true );
+	}
+}
+
+/**
+ * Overlay this plugin's values onto an array that Pro may also have written,
+ * keeping any keys this plugin does not manage.
+ *
+ * @param mixed $existing Stored value.
+ * @param array $values   Values this plugin manages.
+ * @return array
+ */
+if ( ! function_exists( 'awdp_free_merge_array' ) ) {
+	function awdp_free_merge_array( $existing, array $values ) {
+		return is_array( $existing ) ? array_replace( $existing, $values ) : $values;
+	}
+}
+
+/**
+ * Accept a CSS colour (hex, rgb/rgba, hsl/hsla or a colour name) and nothing
+ * that could end the declaration it is printed in.
+ *
+ * @param mixed $color
+ * @return string Empty string when invalid.
+ */
+if ( ! function_exists( 'awdp_free_sanitize_css_color' ) ) {
+	function awdp_free_sanitize_css_color( $color ) {
+		if ( ! is_string( $color ) ) {
+			return '';
+		}
+		$color = trim( $color );
+		if ( preg_match( '/^(#[0-9a-f]{3,8}|(rgb|rgba|hsl|hsla)\([0-9\s.,%]+\)|[a-z]{3,30})$/i', $color ) ) {
+			return $color;
+		}
+		return '';
+	}
+}
+
+/**
+ * Keep a numeric setting as stored (number or numeric string), or ''.
+ *
+ * @param mixed $value
+ * @return mixed
+ */
+if ( ! function_exists( 'awdp_free_sanitize_number' ) ) {
+	function awdp_free_sanitize_number( $value ) {
+		return ( is_numeric( $value ) && ! is_bool( $value ) ) ? $value : '';
+	}
+}
+
+/**
+ * Make text safe inside a double-quoted CSS string printed in a <style> block.
+ *
+ * @param string $value
+ * @return string
+ */
+if ( ! function_exists( 'awdp_free_css_string' ) ) {
+	function awdp_free_css_string( $value ) {
+		return str_replace( array( '<', '>' ), '', addcslashes( (string) $value, "\"\\" ) );
+	}
+}
+
+/**
+ * Sanitize the settings payload by field type. Only keys that are present are
+ * touched, and value types are kept (booleans stay booleans), so the stored
+ * options keep the shape both this plugin and Pro read.
+ *
+ * @param array $params Request parameters.
+ * @return array
+ */
+if ( ! function_exists( 'awdp_free_sanitize_settings' ) ) {
+	function awdp_free_sanitize_settings( array $params ) {
+		$types = array(
+			'text'   => array( 'pricing_title', 'pricing_price_label', 'pricing_quantity_label', 'pricing_new_label', 'default_fee_label', 'tablevaluetext', 'tableposition', 'tablesort', 'tablevalue', 'dismessage_rule', 'dismessage_position', 'custom_message_position', 'coupon_interaction' ),
+			'html'   => array( 'discount_message', 'discount_description', 'discount_item_description', 'dismessage', 'custom_message' ),
+			'color'  => array( 'table_border_color', 'dismessage_background', 'dismessage_color', 'offer_border_color', 'custom_message_border_color', 'custom_message_background', 'custom_message_color' ),
+			'number' => array( 'tablefontsize', 'dismessage_fontsize', 'dismessage_paddding_lm', 'dismessage_paddding_tp', 'dismessage_radius', 'border_top_width', 'border_right_width', 'border_bottom_width', 'border_left_width', 'custom_message_linheight', 'custom_message_fontsize', 'custom_message_paddding_lm', 'custom_message_paddding_tp', 'custom_message_border_radius', 'custom_message_border_top_width', 'custom_message_border_right_width', 'custom_message_border_bottom_width', 'custom_message_border_left_width' ),
+			'flag'   => array( 'discount_message_status', 'discount_message_once', 'tablevaluetextdisable', 'hide_coupon_box', 'disable_discount', 'enable_dismessage', 'wordpress_timezone', 'use_regular', 'dynamicpricing', 'variablepricing', 'custom_message_status' ),
+		);
+
+		foreach ( $types as $type => $keys ) {
+			foreach ( $keys as $key ) {
+				if ( ! array_key_exists( $key, $params ) ) {
+					continue;
+				}
+				$value = $params[ $key ];
+
+				if ( 'number' === $type ) {
+					$params[ $key ] = awdp_free_sanitize_number( $value );
+				} elseif ( 'color' === $type ) {
+					$params[ $key ] = awdp_free_sanitize_css_color( $value );
+				} elseif ( is_bool( $value ) || null === $value ) {
+					$params[ $key ] = $value;
+				} elseif ( ! is_scalar( $value ) ) {
+					$params[ $key ] = '';
+				} elseif ( 'html' === $type ) {
+					$params[ $key ] = wp_kses_post( (string) $value );
+				} else {
+					$params[ $key ] = sanitize_text_field( (string) $value );
+				}
+			}
+		}
+
+		return $params;
 	}
 }

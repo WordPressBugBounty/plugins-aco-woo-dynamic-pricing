@@ -14,7 +14,6 @@ class AWDP_Discount_Rules extends AWDP_Discount_Module
 
         $list_id = ( array_key_exists ( 'product_list', $rule ) && $rule['product_list'] ) ? $rule['product_list'] : '';
 
-        $evel_str = '';
         //  $rules_to_validate = ['cart_total_amount', 'cart_total_amount_all_prods', 'cart_items', 'cart_items_all_prods', 'cart_products'];
         $result = true;// if no rules, the validation must be true
 
@@ -27,52 +26,41 @@ class AWDP_Discount_Rules extends AWDP_Discount_Module
         $allowed_operators = ['AND', 'OR', ''];
         if ( isset($rule['rules']) && is_array($rule['rules']) && !empty($rule['rules']) ) {
 
+            // Conditions not checked in this pass count as met; rows and groups combine
+            // with AND before OR (see awdp_free_evaluate_condition_chain()).
+            $group_results   = [];
+            $group_operators = [];
+
             foreach ( $rule['rules'] as $val ) {
 
                 if ( !empty($val['rules']) && is_array($val['rules']) && count($val['rules']) ) {
 
-                    $evel_str .= '(';
+                    $row_results   = [];
+                    $row_operators = [];
                     $val_rules = array_values ( array_filter( $val['rules'] ) ); // Remove null elements - 3.4.2 fix
-                    foreach ( $val_rules as $rul ) { 
-                        $evel_str .= '(';
+                    foreach ( $val_rules as $rul ) {
                         if ( in_array ( $rul['rule']['item'], $rules_to_validate) && $rul['rule']['value'] != '' ) {
-                            if ( $this->eval_rule ( $rul['rule'], $cart_obj, $rule, $list_id, $qn_flag, $item, $single ) ) { 
-                                $evel_str .= ' true ';
-                            } else { 
-                                $evel_str .= ' false ';
-                            }
+                            $row_results[] = (bool) $this->eval_rule ( $rul['rule'], $cart_obj, $rule, $list_id, $qn_flag, $item, $single );
                         } else {
-                            $evel_str .= ' true ';
+                            $row_results[] = true;
                         }
-                        $operator = (isset($rul['operator']) && in_array($rul['operator'], $allowed_operators, true)) ? $rul['operator'] :
-                            'AND';
-                        $evel_str .= ') ' . (($operator !== false) ? $operator : '') . ' ';
+                        $row_operators[] = (isset($rul['operator']) && in_array($rul['operator'], $allowed_operators, true)) ? $rul['operator'] : 'AND';
                     }
 
-                    if ( count($val['rules']) > 0 && !empty($val['rules']) ) {
-                        preg_match_all('/\(.*\)/', $evel_str, $match);
-                        $evel_str = $match[0][0] . ' ';
+                    if ( empty( $row_results ) ) {
+                        continue;
                     }
-                    $operator = (isset($val['operator']) && in_array($val['operator'], $allowed_operators, true)) ? $val['operator'] :
-                        'AND';
-                    $evel_str .= ') ' . (($operator !== false) ? $operator : '') . ' ';
+
+                    $group_results[]   = awdp_free_evaluate_condition_chain( $row_results, $row_operators );
+                    $group_operators[] = (isset($val['operator']) && in_array($val['operator'], $allowed_operators, true)) ? $val['operator'] : 'AND';
 
                 }
 
             }
 
-            if (count($rule['rules']) > 0 && !empty($rule['rules']) && $evel_str != '') {
-                preg_match_all('/\(.*\)/', $evel_str, $match);
-                $evel_str = $match[0][0] . ' ';
-            }
+            $result = awdp_free_evaluate_condition_chain( $group_results, $group_operators );
 
-            $evel_str = str_replace(['and', 'or'], ['&&', '||'], strtolower($evel_str));
-
-            if ($evel_str !== '') {
-                $result = eval('return ' . $evel_str . ';');
-            }
-
-        } 
+        }
 
         return $result;
     }

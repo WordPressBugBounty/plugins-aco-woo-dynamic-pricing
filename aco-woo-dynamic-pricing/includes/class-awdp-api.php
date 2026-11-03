@@ -172,7 +172,10 @@ class AWDP_Api
     function action_duplicate($data) 
     {
         $data   = $data->get_params();
-        $id     = $data['id']; 
+        $id     = isset( $data['id'] ) ? absint( $data['id'] ) : 0;
+        if ( $id && ! awdp_free_is_own_post( $id, array( AWDP_POST_TYPE ) ) ) {
+            return new WP_Error( 'rest_rule_not_found', __( 'Rule not found or is invalid.', 'aco-woo-dynamic-pricing' ), array( 'status' => 404 ) );
+        }
         if ( $id ) {
             $title      = get_the_title($id).' - Copy';
             $author_id  = get_post_field ( 'post_author', $id );
@@ -189,7 +192,7 @@ class AWDP_Api
             foreach ( $data as $key => $values ) {
                 foreach ( $values as $value ) { 
                     if ( $key === 'bogo_combinations' || $key === 'gift' || $key === 'discount_schedule_days' || $key === 'discount_schedules' || $key === 'discount_bogopayranges' || $key === 'discount_quantityranges' || $key === 'discount_cartamount' || $key === 'discount_bogo_combinations' || $key === 'discount_gift' || $key === 'gift_config' || $key === 'discount_gift_cart_item' || $key === 'discount_config' || $key === 'user_config' || $key === 'wdp_shortcode' || $key === 'wdp_bogo_config' || $key === 'custom_product_list' ) {
-                        $value = unserialize ( $value );
+                        $value = unserialize ( $value, array( 'allowed_classes' => false ) );
                     } else if ( $key === 'discount_status' ) {
                         $value = 0;
                     }
@@ -319,7 +322,7 @@ class AWDP_Api
         // drags cannot leave gaps or collisions with rules on other pages.
         if ( is_array( $items ) ) {
             foreach ( $items as $key => $value ) {
-                if ( empty( $value['discount_id'] ) ) {
+                if ( empty( $value['discount_id'] ) || ! awdp_free_is_own_post( $value['discount_id'], array( AWDP_POST_TYPE ) ) ) {
                     continue;
                 }
                 $priority = isset( $value['discount_priority'] ) ? intval( $value['discount_priority'] ) : ( $key + 1 );
@@ -518,7 +521,11 @@ class AWDP_Api
     {
         $data       = $data->get_params();
         $wdp_status = ( $data['status'] ) ? 1 : 0;
-        $id         = $data['id'];
+        $id         = isset( $data['id'] ) ? absint( $data['id'] ) : 0;
+
+        if ( $id && ! awdp_free_is_own_post( $id, array( AWDP_POST_TYPE ) ) ) {
+            return new WP_Error( 'rest_rule_not_found', __( 'Rule not found or is invalid.', 'aco-woo-dynamic-pricing' ), array( 'status' => 404 ) );
+        }
 
         if ( $id ) {
 
@@ -609,8 +616,12 @@ class AWDP_Api
     {
         $data           = $data->get_params();
         $action         = $data['action'];
-        $selectedItems  = array_column($data['selectedItems'], 'discount_id'); 
-        $priority       = 1; 
+        $selectedItems  = isset( $data['selectedItems'] ) && is_array( $data['selectedItems'] ) ? array_column($data['selectedItems'], 'discount_id') : array();
+        // Only ever act on this plugin's rules.
+        $selectedItems  = array_filter( array_map( 'absint', $selectedItems ), function ( $item ) {
+            return awdp_free_is_own_post( $item, array( AWDP_POST_TYPE ) );
+        } );
+        $priority       = 1;
 
         if ( $action === 'delete' ) { 
             // Delete rules
@@ -736,8 +747,8 @@ class AWDP_Api
         $currentLang        = !$checkML ? call_user_func ( array ( new AWDP_ML(), 'current_language' ), '' ) : '';
 
         if( ! $data['id'] ) {
-            
-            $data = $data->get_params();
+
+            $data = awdp_free_sanitize_settings( $data->get_params() );
 
             $pricing_title              = $data['pricing_title'] ? $data['pricing_title'] : '';
             $pricing_price_label        = $data['pricing_price_label'] ? $data['pricing_price_label'] : '';
@@ -1001,30 +1012,31 @@ class AWDP_Api
             // Canonical coupon interaction mode (also syncs legacy flags).
             awdp_set_coupon_interaction_mode( $coupon_interaction );
 
+            // Array options below are merged, not replaced: Pro stores extra keys in some of them.
             if ( false === get_option('awdp_disc_desc_config') )
                 add_option('awdp_disc_desc_config', $disc_desc_config, '', 'yes');
             else
-                update_option('awdp_disc_desc_config', $disc_desc_config);
+                update_option('awdp_disc_desc_config', awdp_free_merge_array( get_option('awdp_disc_desc_config'), $disc_desc_config ));
 
             if ( false === get_option('awdp_time_zone_config') )
                 add_option('awdp_time_zone_config', $time_zone_config, '', 'yes');
             else
-                update_option('awdp_time_zone_config', $time_zone_config);
+                update_option('awdp_time_zone_config', awdp_free_merge_array( get_option('awdp_time_zone_config'), $time_zone_config ));
 
             if ( false === get_option('awdp_addition_settings') )
                 add_option('awdp_addition_settings', $addition_settings , '', 'yes');
             else
-                update_option('awdp_addition_settings', $addition_settings );
-            
+                update_option('awdp_addition_settings', awdp_free_merge_array( get_option('awdp_addition_settings'), $addition_settings ) );
+
             if ( false === get_option('awdp_new_config') )
                 add_option('awdp_new_config', $new_config, '', 'yes');
             else
-                update_option('awdp_new_config', $new_config);
+                update_option('awdp_new_config', awdp_free_merge_array( get_option('awdp_new_config'), $new_config ));
 
             if ( false === get_option('awdp_custom_msg_settings') )
                 add_option('awdp_custom_msg_settings', $custom_message_settings, '', 'yes');
             else
-                update_option('awdp_custom_msg_settings', $custom_message_settings);
+                update_option('awdp_custom_msg_settings', awdp_free_merge_array( get_option('awdp_custom_msg_settings'), $custom_message_settings ));
 
             // if ( false === get_option('awdp_apply_coupon_discount') )
             //     add_option('awdp_apply_coupon_discount', $apply_coupon_discount, '', 'yes' );
@@ -1175,6 +1187,10 @@ class AWDP_Api
             }
         }
 
+        if ( ! empty( $data['id'] ) && ! awdp_free_is_own_post( $data['id'], array( AWDP_POST_TYPE ) ) ) {
+            return new WP_Error( 'rest_rule_not_found', __( 'Rule not found or is invalid.', 'aco-woo-dynamic-pricing' ), array( 'status' => 404 ) );
+        }
+
         if ($data['id']) {
             $my_post = array(
                 'ID'            => $data['id'],
@@ -1218,7 +1234,7 @@ class AWDP_Api
         $wdp_priority       = isset($data['priority']) ? $data['priority'] : '';
         $wdp_product_list   = isset($data['product_list']) ? $data['product_list'] : '';
         $wdp_inc_tax        = isset($data['inc_tax']) ? $data['inc_tax'] : '';
-        $wdp_label          = isset($data['label']) ? $data['label'] : '';
+        $wdp_label          = isset($data['label']) && is_scalar($data['label']) ? sanitize_text_field($data['label']) : '';
         $wdp_sequentially   = isset($data['sequentially']) ? $data['sequentially'] : '';
         $wdp_usage_limit    = isset($data['usage_limit']) ? $data['usage_limit'] : '';
         $wdp_disable_on_sale = isset($data['disable_on_sale']) ? $data['disable_on_sale'] : '';
@@ -1332,7 +1348,8 @@ class AWDP_Api
             // 'disable_on_rules' => $wdp_disable_on_rules,
         );
 
-        update_post_meta($id, 'discount_config', $other_config);
+        // Merge so keys added by Pro (e.g. offer_desc_status) survive a save here.
+        update_post_meta($id, 'discount_config', awdp_free_merge_array( get_post_meta($id, 'discount_config', true), $other_config ));
 
         update_post_meta($id, 'dynamic_value', $dynamic_value);        
         update_post_meta($id, 'custom_product_list', $customPL);
@@ -1585,6 +1602,9 @@ class AWDP_Api
     function product_list($data)
     {
         if (isset($data['id'])) {
+            if ( ! awdp_free_is_own_post( $data['id'], array( AWDP_PRODUCT_LIST ) ) ) {
+                return new WP_Error( 'rest_list_not_found', __( 'Product list not found or is invalid.', 'aco-woo-dynamic-pricing' ), array( 'status' => 404 ) );
+            }
             global $wpdb;
             $result                 = array();
             $list_item              = get_post($data['id']);
@@ -1694,6 +1714,9 @@ class AWDP_Api
     function product_rule($data)
     {
         $data = $data->get_params();
+        if ( ! empty( $data['id'] ) && ! awdp_free_is_own_post( $data['id'], array( AWDP_PRODUCT_LIST ) ) ) {
+            return new WP_Error( 'rest_list_not_found', __( 'Product list not found or is invalid.', 'aco-woo-dynamic-pricing' ), array( 'status' => 404 ) );
+        }
         $this->delete_transient();
         if ($data['id']) {
             $my_post = array(
@@ -1768,7 +1791,8 @@ class AWDP_Api
             'selectionMethod'   => isset($data['selectionMethod']) ? sanitize_text_field($data['selectionMethod']) : '',
             'sku_search'        => isset($data['sku_search']) ? sanitize_text_field($data['sku_search']) : '',
         );
-        update_post_meta($id, 'product_list_config', $other_config);
+        // Merge so keys added by Pro (e.g. variationrules) survive a save here.
+        update_post_meta($id, 'product_list_config', awdp_free_merge_array( get_post_meta($id, 'product_list_config', true), $other_config ));
     }
     
     /**
@@ -1850,7 +1874,7 @@ class AWDP_Api
      **/
     public function get_permission()
     {
-        if (current_user_can('administrator') || current_user_can('manage_woocommerce')) {
+        if (current_user_can('administrator') || current_user_can(awdp_free_manage_capability())) {
             return true;
         } else {
             return false;
