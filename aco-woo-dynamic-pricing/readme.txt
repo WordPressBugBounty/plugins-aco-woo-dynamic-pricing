@@ -7,7 +7,7 @@ Tags: WooCommerce Dynamic Pricing, WooCommerce Discount rules, WooCommerce Bulk 
 Requires at least: 6.5
 Tested up to: 7.2
 Requires PHP: 7.4
-Stable tag: 5.1.1
+Stable tag: 5.1.2
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -226,7 +226,19 @@ Yes, you can change the border color to match your theme style. We have also pro
 = What happens after my PRO license expires? =
 You will be able to use plugin in your site, but however, you won't be able to receive any further updates and priority support.
 
+== External services ==
+
+This plugin connects to the Acowebs Feedback API (https://audience.acowebs.com), run by Acowebs, only when an administrator chooses to send something. Nothing is sent on activation, on page load or in the background.
+
+* **Deactivation feedback.** When you deactivate the plugin, a popup asks why. Only if you click "Send & deactivate" does it send your chosen reason and comment, your site address, site name and language, the plugin version, and your WordPress, WooCommerce and PHP versions. Your name and email are included only while "Acowebs can contact me about this feedback" is ticked. "Skip & deactivate" sends nothing.
+* **Newsletter signup.** An optional notice on the plugin's admin pages and the dashboard offers the Acowebs newsletter. Only if you click "Subscribe" does it send the email address you enter, plus the first name and phone number if you fill them in, your site address and name, the plugin name and edition, and which admin page you subscribed from. "Not now" hides the notice for good without sending anything.
+
+Acowebs privacy policy: https://acowebs.com/privacy-policy/
+Terms and conditions: https://acowebs.com/terms-conditions/
+
 == Changelog ==
+= 5.1.2 =
+* General bug fixes and improvements
 = 5.1.1 =
 * Security and stability improvements
 * Applied discounts now shown on the Thank You page and in order emails
@@ -588,6 +600,8 @@ You will be able to use plugin in your site, but however, you won't be able to r
 * Woocomerce discount plugin
 
 == Upgrade Notice ==
+= 5.1.2 =
+General bug fixes and improvements.
 = 5.1.1 =
 Security and stability update. Recommended for all users.
 = 5.1.0 =

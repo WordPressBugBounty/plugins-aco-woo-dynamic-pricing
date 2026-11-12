@@ -1,7 +1,7 @@
 <?php
 /*
  * Plugin Name: Acowebs Woocommerce Dynamic Pricing
- * Version: 5.1.1
+ * Version: 5.1.2
  * Description: Woocommerce Dynamic Pricing helps to apply discounts for woocommerce products. Its sophisticated user interfaces will help to add discounts very easily.
  * Author: Acowebs
  * Author URI: http://acowebs.com
@@ -79,7 +79,7 @@ defined('AWDP_PRODUCT_LIST') || define('AWDP_PRODUCT_LIST', 'awdp_pt_products');
 defined('AWDP_WC_PRODUCTS') || define('AWDP_WC_PRODUCTS', 'product');
 
 defined('AWDP_TOKEN') || define('AWDP_TOKEN', 'awdp');
-defined('AWDP_VERSION') || define('AWDP_VERSION', '5.1.1');
+defined('AWDP_VERSION') || define('AWDP_VERSION', '5.1.2');
 defined('AWDP_FILE') || define('AWDP_FILE', __FILE__);
 defined('AWDP_PLUGIN_NAME') || define('AWDP_PLUGIN_NAME', 'Acowebs Woocommerce Dynamic Pricing');
 defined('AWDP_PRODUCTS_TRANSIENT_KEY') || define('AWDP_PRODUCTS_TRANSIENT_KEY', 'awdp_product_list');
@@ -150,4 +150,7 @@ add_action('init', 'awdp_init');
 spl_autoload_register('awdp_autoloader');
 if (is_admin()) {
     AWDP();
+    // Deactivation feedback popup and newsletter opt-in notice (Acowebs Feedback API). Loaded at plugin load,
+    // not on admin_init, so their admin-ajax handlers are registered too.
+    new AWDP_Feedback(__FILE__);
 }

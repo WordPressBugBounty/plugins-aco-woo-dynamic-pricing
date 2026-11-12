@@ -1,0 +1,87 @@
+<!--
+  Acowebs newsletter opt-in notice (Acowebs feedback UI kit v1.0.0). Needs acowebs-feedback-ui.css.
+  Printed by Acowebs_Feedback_Optin::render_notice(), which removes this comment and fills in the placeholders:
+    {Plugin name}             the plugin's display name (esc_html); value="{Plugin name}" gets the canonical name (esc_attr)
+    {prefix}                  the plugin's prefix, keeps the ids unique when several Acowebs plugins are active (esc_attr)
+    admin@example.com         the admin's email (esc_attr)
+    list / edition values     the registered list and edition (esc_attr)
+    https://shop.example.com  home_url() (esc_url)
+    Example Shop              the site title (esc_attr)
+  The hidden inputs are informational only: the PHP handler builds the API payload itself.
+-->
+<div class="acofb acofb-notice" id="acofb-{prefix}-newsletter" data-acofb="newsletter">
+  <button type="button" class="acofb-close" data-acofb-action="dismiss" aria-label="Dismiss">
+    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>
+  </button>
+
+  <div class="acofb-notice-body">
+    <div class="acofb-intro">
+      <span class="acofb-badge acofb-badge--lg" aria-hidden="true">
+        <svg viewBox="-8 -1.5 86 86" focusable="false"><path fill="#00DFB1" fill-rule="evenodd" d="M2.85642 22.0022C6.72119 18.0569 13.0525 17.9916 16.9978 21.8564L41.4978 45.8564C43.4052 47.7249 44.4861 50.2785 44.4999 52.9485C44.5136 55.6185 43.4591 58.1831 41.5711 60.0711L21.5711 80.0711C17.6658 83.9763 11.3342 83.9763 7.42894 80.0711C3.52369 76.1658 3.52369 69.8342 7.42894 65.9289L20.2846 53.0733L3.0022 36.1436C-0.943088 32.2788 -1.00836 25.9475 2.85642 22.0022Z"/><path fill="#00B2FF" fill-rule="evenodd" d="M60.1791 3.124C64.5289 7.36505 64.6171 14.3293 60.376 18.6791L48.4585 30.9022L65.7782 48.2218C70.0739 52.5176 70.0739 59.4824 65.7782 63.7782C61.4824 68.0739 54.5176 68.0739 50.2218 63.7782L25.2218 38.7782C20.9645 34.5208 20.9209 27.6318 25.124 23.3209L44.624 3.3209C48.8651 -1.02889 55.8293 -1.11705 60.1791 3.124Z"/><path fill="#0A84FF" fill-rule="evenodd" d="M43.5968 57.1543L25.2218 38.7786C22.1371 35.6937 21.2645 31.2271 22.6168 27.3607L41.4978 45.8572C43.4052 47.7257 44.4861 50.2794 44.4999 52.9495C44.5074 54.4143 44.1935 55.8473 43.5968 57.1543Z"/></svg>
+      </span>
+      <div class="acofb-intro-copy">
+        <p class="acofb-eyebrow">Acowebs · WooCommerce plugins</p>
+        <h2 class="acofb-headline" id="acofb-{prefix}-nl-title">Get new Acowebs plugins and features first</h2>
+        <p class="acofb-text">Thanks for using {Plugin name}! Join our newsletter to hear about new plugins, feature updates and subscriber-only offers.</p>
+        <ul class="acofb-chips" aria-label="What you get">
+          <li class="acofb-chip acofb-chip--blue">New plugin launches</li>
+          <li class="acofb-chip acofb-chip--mint">Feature updates</li>
+          <li class="acofb-chip acofb-chip--cyan">WooCommerce tips</li>
+          <li class="acofb-chip acofb-chip--gold">Subscriber-only offers</li>
+        </ul>
+      </div>
+    </div>
+
+    <form class="acofb-panel" aria-labelledby="acofb-{prefix}-nl-title">
+      <div class="acofb-field-row">
+        <div class="acofb-field" data-api-field="name">
+          <label class="acofb-label" for="acofb-{prefix}-nl-name">First name <span class="acofb-optional">(optional)</span></label>
+          <input class="acofb-input" type="text" id="acofb-{prefix}-nl-name" name="name" maxlength="255" autocomplete="given-name">
+        </div>
+        <div class="acofb-field" data-api-field="phone">
+          <label class="acofb-label" for="acofb-{prefix}-nl-phone">Phone <span class="acofb-optional">(optional)</span></label>
+          <input class="acofb-input" type="tel" id="acofb-{prefix}-nl-phone" name="phone" maxlength="40" autocomplete="tel">
+        </div>
+      </div>
+      <div class="acofb-field" data-api-field="email" data-api-required>
+        <label class="acofb-label" for="acofb-{prefix}-nl-email">Email</label>
+        <input class="acofb-input" type="email" id="acofb-{prefix}-nl-email" name="email" value="admin@example.com" maxlength="320" autocomplete="email" required>
+      </div>
+
+      <input type="hidden" name="list" value="general" data-api-field="list">
+      <input type="hidden" name="source" value="plugin-admin-notice" data-api-field="source">
+      <input type="hidden" name="plugin" value="{Plugin name}" data-api-field="plugin">
+      <input type="hidden" name="edition" value="free" data-api-field="edition">
+      <input type="hidden" name="site_url" value="https://shop.example.com" data-api-field="site_url">
+      <input type="hidden" name="site_name" value="Example Shop" data-api-field="site_name">
+      <div class="acofb-hp" aria-hidden="true" data-api-field="website_hp">
+        <label for="acofb-{prefix}-nl-hp">Website</label>
+        <input type="text" id="acofb-{prefix}-nl-hp" name="website_hp" tabindex="-1" autocomplete="off">
+      </div>
+
+      <div class="acofb-actions-row">
+        <button type="submit" class="acofb-btn acofb-btn--primary" data-api-field="consent" data-api-value="true">Subscribe <span class="acofb-btn-arrow" aria-hidden="true">→</span></button>
+        <button type="button" class="acofb-btn acofb-btn--text" data-acofb-action="dismiss">Not now</button>
+      </div>
+      <p class="acofb-msg" role="status" aria-live="polite"></p>
+
+      <p class="acofb-privacy">
+        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 1a3.5 3.5 0 0 0-3.5 3.5V6H4a1.5 1.5 0 0 0-1.5 1.5v6A1.5 1.5 0 0 0 4 15h8a1.5 1.5 0 0 0 1.5-1.5v-6A1.5 1.5 0 0 0 12 6h-.5V4.5A3.5 3.5 0 0 0 8 1Zm2 5V4.5a2 2 0 1 0-4 0V6h4Z"/></svg>
+        <span>About two emails a month from Acowebs: new plugins, updates and offers. We never sell or share your email, and you can unsubscribe anytime. <a class="acofb-link" href="https://acowebs.com/privacy-policy/" target="_blank" rel="noopener noreferrer">Privacy policy<span class="acofb-sr"> (opens in a new tab)</span></a></span>
+      </p>
+
+      <p class="acofb-api-auto" aria-hidden="true">Hidden: <code>list</code> <code>source: plugin-admin-notice</code> <code>plugin</code> <code>edition</code> <code>site_url</code> <code>site_name</code> <code>website_hp</code> <code>meta (optional)</code></p>
+    </form>
+  </div>
+
+  <!-- Thank-you state: the JS shows this (and hides .acofb-notice-body) after a successful subscribe, then focuses it. -->
+  <div class="acofb-thanks" role="status" tabindex="-1" hidden>
+    <span class="acofb-thanks-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </span>
+    <div>
+      <p class="acofb-title">You're in!</p>
+      <p class="acofb-sub">Watch your inbox for new plugins, updates and offers from Acowebs.</p>
+    </div>
+  </div>
+</div>
